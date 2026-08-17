@@ -5,95 +5,44 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core.dart';
 import 'ui.dart';
-import 'tv.dart';
 import 'lang.dart';
 import 'notify.dart';
 
-/* ======== نقطة البداية ======== */
+/* ======== نقطة دخول تطبيق الجوال ======== */
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // إعدادات النظام
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
-  // تهيئة Hive
   await Hive.initFlutter();
   await Store.init();
-
-  // تهيئة الإشعارات
   await Notify.init();
-
-  // ربط المزامنة بالإشعارات
   Sync.onNewMovies = (n, t) => Notify.newMovies(n, t);
 
-  // ✅ التحسين: بدء المزامنة بشكل ذكي
-  _startSmartSync();
+  // ✅ مزامنة ذكية: مرة كل 24 ساعة فقط، أو يدوياً، أو عند إضافة قناة
+  if (Store.shouldSync()) {
+    Timer(const Duration(seconds: 5), () => Sync.syncNow());
+  }
+  Sync.start();
 
-  // إعداد اللغة
   Lang.locale.value = Store.locale;
 
-  // تشغيل التطبيق
-  runApp(const Root());
+  runApp(const MobileApp());
 }
 
-/* ======== المزامنة الذكية ======== */
+/* ======== تطبيق الجوال ======== */
 
-void _startSmartSync() {
-  // ابدأ المزامنة بعد 5 ثواني (لإعطاء التطبيق وقت للتحميل الأولي)
-  Timer(const Duration(seconds: 5), () {
-    Sync.checkAll();
-  });
-
-  // Timer دوري للتحديث (كل ساعتين داخل Sync.start)
-  Sync.start();
+class MobileApp extends StatefulWidget {
+  const MobileApp({super.key});
+  @override
+  State<MobileApp> createState() => _MobileAppState();
 }
 
-/* ======== الجذر الرئيسي ======== */
-
-class Root extends StatefulWidget {
-  const Root({super.key});
-
-  @override
-  State<Root> createState() => _RootState();
-}
-
-class _RootState extends State<Root> with WidgetsBindingObserver {
-  bool _isTvMode = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _checkTvMode();
-  }
-
-  void _checkTvMode() {
-    final isTv = Store.getBool('tvMode', false);
-    if (mounted && isTv != _isTvMode) {
-      setState(() => _isTvMode = isTv);
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-
-    // ✅ عند العودة للتطبيق من الخلفية، تحقق من المزامنة
-    if (state == AppLifecycleState.resumed) {
-      Sync.checkAll();
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
+class _MobileAppState extends State<MobileApp> {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<String>(
@@ -113,8 +62,8 @@ class _RootState extends State<Root> with WidgetsBindingObserver {
               surface: const Color(0xFF151B23),
             ),
           ),
-          // ✅ الواجهة القديمة بخمسة تبويبات بدل الثلاثة
-          home: _isTvMode ? const TvHome() : const HomeShell(),
+          // ✅ واجهة الجوال فقط (HomeShell موجودة في ui.dart)
+          home: const HomeShell(),
           builder: (context, child) {
             return Directionality(
               textDirection: TextDirection.rtl,
