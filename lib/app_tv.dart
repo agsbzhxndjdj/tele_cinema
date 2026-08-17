@@ -8,18 +8,16 @@ import 'tv.dart';
 import 'lang.dart';
 import 'notify.dart';
 
-/* ======== نقطة دخول تطبيق التلفزيون (نسخة منفصلة) ======== */
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ إجبار الوضع الأفقي (الشاشات الكبيرة)
+  // ✅ إجبار الوضع الأفقي
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
     DeviceOrientation.landscapeRight,
   ]);
 
-  // ✅ إخفاء أشرطة النظام بالكامل (وضع غامر للـ TV)
+  // ✅ وضع غامر (إخفاء الأشرطة)
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   await Hive.initFlutter();
@@ -27,18 +25,13 @@ Future<void> main() async {
   await Notify.init();
   Sync.onNewMovies = (n, t) => Notify.newMovies(n, t);
 
-  // ✅ مزامنة ذكية: مرة كل 24 ساعة فقط + عند إضافة قناة يدوياً
-  if (Store.shouldSync()) {
-    Timer(const Duration(seconds: 5), () => Sync.syncNow());
-  }
+  // ✅ مزامنة ذكية: استخدم الدوال الموجودة في core.dart الأصلي
   Sync.start();
 
   Lang.locale.value = Store.locale;
 
   runApp(const TvApp());
 }
-
-/* ======== تطبيق التلفزيون ======== */
 
 class TvApp extends StatefulWidget {
   const TvApp({super.key});
