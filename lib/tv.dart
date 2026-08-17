@@ -340,12 +340,13 @@ class _TvHomeState extends State<TvHome> {
                               const SizedBox(height: 26),
                               FilledButton.icon(onPressed: _addDialog, icon: const Icon(Icons.add), label: Text(Lang.t('addChannel'), style: const TextStyle(fontSize: 16)), style: FilledButton.styleFrom(minimumSize: const Size(260, 54), backgroundColor: AppTheme.accent, foregroundColor: Colors.black, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)))),
                             ]))
-                          : ListView(children: [
+                          : Column(children: [
                               if (reco.isNotEmpty) _row('✨ مقترح لك', reco),
-                              if (list.isEmpty)
-                                const Padding(padding: EdgeInsets.all(60), child: Center(child: Text('لا توجد نتائج', style: TextStyle(fontSize: 20, color: Colors.grey))))
-                              else
-                                SizedBox(height: MediaQuery.of(context).size.height - (reco.isNotEmpty ? 420 : 260), child: _grid(list)),
+                              Expanded(
+                                child: list.isEmpty
+                                    ? const Center(child: Text('لا توجد نتائج', style: TextStyle(fontSize: 20, color: Colors.grey)))
+                                    : _grid(list),
+                              ),
                             ])),
             ]));
       });
