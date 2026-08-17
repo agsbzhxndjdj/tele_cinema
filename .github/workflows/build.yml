@@ -40,7 +40,7 @@ jobs:
           python3 - << 'PYEOF'
           import re
 
-          # 1) settings.gradle: إضافة google-services في plugins block
+          # 1) settings.gradle
           p = 'android/settings.gradle'
           s = open(p).read()
           if 'google-services' not in s:
@@ -52,7 +52,7 @@ jobs:
                   open(p, 'w').write(s)
                   print('settings.gradle patched')
 
-          # 2) app/build.gradle: تفعيل google-services + توقيع release
+          # 2) app/build.gradle
           p = 'android/app/build.gradle'
           s = open(p).read()
           if 'com.google.gms.google-services' not in s:
@@ -130,14 +130,29 @@ jobs:
           } > "$MAIN_ACT"
           cat "$MAIN_ACT"
 
-      - name: البناء
+      - name: Prepare (pub get + icons)
         run: |
           flutter pub get
           flutter pub run flutter_launcher_icons:main
-          flutter build apk --release
 
-      - name: Upload APK
+      # ✅✅✅ الجديد: بناء نسختين منفصلتين ✅✅✅
+      - name: Build MOBILE APK
+        run: |
+          flutter build apk --release -t lib/main.dart
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
+          echo "MOBILE APK built"
+
+      - name: Build TV APK
+        run: |
+          sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
+          flutter build apk --release -t lib/app_tv.dart
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
+          echo "TV APK built"
+
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: tele-cinema-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: tele-cinema-apks
+          path: |
+            build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
+            build/app/outputs/flutter-apk/tele-cinema-TV.apk
