@@ -33,9 +33,25 @@ jobs:
           if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
           if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
           if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
-          ls -la android/app/ | head -20
 
-      - name: Patch gradle (google-services + signing)
+      # ✅✅✅ تحقق من الملفات قبل أي تعديل ✅✅✅
+      - name: Verify files exist
+        run: |
+          echo "=== الملفات الموجودة في lib ==="
+          ls -la lib/
+          echo ""
+          echo "=== محتوى lib/app_tv.dart (أول 10 أسطر) ==="
+          if [ -f lib/app_tv.dart ]; then
+            head -10 lib/app_tv.dart
+          else
+            echo "⚠️  الملف lib/app_tv.dart غير موجود!"
+            exit 1
+          fi
+          echo ""
+          echo "=== محتوى lib/main.dart (أول 10 أسطر) ==="
+          head -10 lib/main.dart
+
+      - name: Patch gradle (google-services + signing + compileSdk 35)
         run: |
           python3 - << 'PYEOF'
           import re
@@ -55,12 +71,16 @@ jobs:
           # 2) app/build.gradle
           p = 'android/app/build.gradle'
           s = open(p).read()
+          
+          # إضافة google-services
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
                   new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
                   s = s.replace(old, new)
+          
+          # إضافة signingConfigs
           sig = """    signingConfigs {
               release {
                   storeFile file('telecinema.keystore')
@@ -73,26 +93,29 @@ jobs:
           if 'signingConfigs' not in s:
               s = s.replace('    buildTypes {', sig + '\n    buildTypes {', 1)
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-          open(p, 'w').write(s)
-          print('GRADLE PATCHED')
-          PYEOF
-
-      # ✅✅✅ جديد: تحديث compileSdk إلى 35 لحل مشكلة flutter_plugin_android_lifecycle ✅✅✅
-      - name: Patch compileSdk to 35
-        run: |
-          python3 - << 'PYEOF'
-          import re
-          p = 'android/app/build.gradle'
-          s = open(p).read()
-          # استبدل compileSdkVersion أو compileSdk بقيمة 35
-          s = re.sub(r'compileSdk\s*[=:]\s*\d+', 'compileSdk = 35', s)
+          
+          # ✅✅✅ تعديل compileSdk إلى 35 (بسيط ومضمون) ✅✅✅
+          # جرب جميع الأنماط الممكنة
           s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
-          # إذا ما كانت موجودة، أضفها داخل android { }
+          s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
+          s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
+          
+          # إذا ما كانت موجودة أبداً، أضفها
           if 'compileSdk' not in s:
               s = re.sub(r'android\s*\{', 'android {\n    compileSdk = 35', s, count=1)
+          
+          # أيضاً targetSdk و minSdk
+          s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
+          s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
+          s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
+          
           open(p, 'w').write(s)
-          print('compileSdk patched to 35')
+          print('✅ gradle patched (google-services + signing + compileSdk 35)')
           PYEOF
+          
+          # عرض الأسطر المعدلة للتأكد
+          echo "=== سطور compileSdk في build.gradle ==="
+          grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
 
       - name: Patch AndroidManifest (HTTP + الاسم + Android TV + الإشعارات)
         run: |
@@ -154,16 +177,18 @@ jobs:
 
       - name: Build MOBILE APK
         run: |
+          echo "=== بناء تطبيق الجوال ==="
           flutter build apk --release -t lib/main.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
-          echo "MOBILE APK built"
+          ls -lh build/app/outputs/flutter-apk/
 
       - name: Build TV APK
         run: |
+          echo "=== بناء تطبيق التلفزيون ==="
           sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
-          echo "TV APK built"
+          ls -lh build/app/outputs/flutter-apk/
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
