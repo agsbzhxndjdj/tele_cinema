@@ -8,8 +8,6 @@ import 'ui.dart';
 import 'lang.dart';
 import 'notify.dart';
 
-/* ======== نقطة دخول تطبيق الجوال ======== */
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -23,18 +21,13 @@ Future<void> main() async {
   await Notify.init();
   Sync.onNewMovies = (n, t) => Notify.newMovies(n, t);
 
-  // ✅ مزامنة ذكية: مرة كل 24 ساعة فقط، أو يدوياً، أو عند إضافة قناة
-  if (Store.shouldSync()) {
-    Timer(const Duration(seconds: 5), () => Sync.syncNow());
-  }
+  // ✅ مزامنة ذكية: استخدم الدوال الموجودة في core.dart الأصلي
   Sync.start();
 
   Lang.locale.value = Store.locale;
 
   runApp(const MobileApp());
 }
-
-/* ======== تطبيق الجوال ======== */
 
 class MobileApp extends StatefulWidget {
   const MobileApp({super.key});
@@ -62,7 +55,6 @@ class _MobileAppState extends State<MobileApp> {
               surface: const Color(0xFF151B23),
             ),
           ),
-          // ✅ واجهة الجوال فقط (HomeShell موجودة في ui.dart)
           home: const HomeShell(),
           builder: (context, child) {
             return Directionality(
