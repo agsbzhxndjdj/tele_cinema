@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -542,6 +544,10 @@ class Store {
       await _ch.clear();
       await _ch.putAll(Map<String, dynamic>.from(data['channels']));
     }
+    if (data['movies'] is Map) {
+      await _mv.clear();
+      await _mv.putAll(Map<String, dynamic>.from(data['movies']));
+    }
     if (data['state'] is Map) {
       await _st.clear();
       await _st.putAll(Map<String, dynamic>.from(data['state']));
@@ -910,51 +916,35 @@ class Sorter {
 }
 
 /* ============================================================
-   ✅ إضافات منطق السلاسل والدمج (تُلصق في نهاية core.dart)
+   ✅ إضافات منطق السلاسل والدمج
    ============================================================ */
-
-/// كائن يمثل إما فيلم عادي أو سلسلة
 class SeriesItem {
   final bool isSeries;
-  final Movie? movie;  // للفيلم العادي
-  final String? seriesTitle;  // للسلسلة
-  final List<Movie>? parts;  // أجزاء السلسلة
-  
+  final Movie? movie;
+  final String? seriesTitle;
+  final List<Movie>? parts;
   SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
   SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
 }
 
-/// استخراج الاسم الأساسي للسلسلة من العنوان
 String extractSeriesBase(String title) {
   var t = title.trim().split('\n').first.trim();
-  
-  // حذف الجودات والسنوات
   t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
   t = t.replaceAll(RegExp(r'\b(1080p|720p|480p|360p|4K|HD|FHD|Web-DL|BluRay|HDRip)\b', caseSensitive: false), ' ');
-  
-  // حذف أرقام الأجزاء
   t = t.replaceAll(RegExp(r'(?:Part|جزء|الجزء)\s*:?\s*\w+', caseSensitive: false), ' ');
   t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
   t = t.replaceAll(RegExp(r'\b\d{1,2}\s*$'), ' ');
-  
-  // فك الكلمات الملتصقة (camelCase)
   t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
-  
-  // حذف الكلمات العامة
   final words = t.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
   final generic = {'the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it'};
   final filtered = words.where((w) => !generic.contains(w.toLowerCase())).toList();
-  
   if (filtered.isEmpty) return '';
   return filtered.take(2).join('_').toLowerCase();
 }
 
-/// دمج الجودات + اكتشاف السلاسل (بديل عن Smart.dedup)
 List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
-  // 1. دمج الجودات المتطابقة (نفس منطق Smart.dedup)
   final seen = <String, Movie>{};
   final deduped = <Movie>[];
-  
   for (final m in all) {
     final k = Smart.titleKey(m.title);
     if (k.isEmpty) {
@@ -969,11 +959,8 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
       e.absorb(m);
     }
   }
-  
-  // 2. اكتشاف السلاسل
   final seriesMap = <String, List<Movie>>{};
   final nonSeries = <Movie>[];
-  
   for (final m in deduped) {
     final base = extractSeriesBase(m.title);
     if (base.isNotEmpty && base.length >= 4) {
@@ -982,112 +969,136 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
       nonSeries.add(m);
     }
   }
-  
-  // 3. بناء النتيجة
   final result = <SeriesItem>[];
-  
-  // الأفلام العادية
   for (final m in nonSeries) {
     result.add(SeriesItem.movie(m));
   }
-  
-  // السلاسل
   for (final entry in seriesMap.entries) {
     final parts = entry.value;
     if (parts.length >= 2) {
-      // هذه سلسلة حقيقية
       parts.sort((a, b) => a.msgId.compareTo(b.msgId));
       final title = entry.key.replaceAll('_', ' ');
       result.add(SeriesItem.series(title, parts));
     } else {
-      // جزء واحد فقط - فيلم عادي
       result.add(SeriesItem.movie(parts.first));
     }
   }
-  
-  // ترتيب حسب التاريخ (الأحدث أولاً)
   result.sort((a, b) {
     final dateA = a.isSeries ? (a.parts?.first.date ?? 0) : (a.movie?.date ?? 0);
     final dateB = b.isSeries ? (b.parts?.first.date ?? 0) : (b.movie?.date ?? 0);
     return dateB.compareTo(dateA);
   });
-  
   return result;
 }
 
 /* ============================================================
-   ✅ السلاسل الذكية المحسّنة (تُلصق في نهاية core.dart)
+   ✅ السلاسل الذكية المحسّنة
    ============================================================ */
 class SeriesRegistry {
-static final Map<String, List<Movie>> parts = {};
-static bool isSeries(String id) => parts.containsKey(id);
-static List<Movie> partsOf(String id) => parts[id] ?? [];
-static int count(String id) => parts[id]?.length ?? 0;
+  static final Map<String, List<Movie>> parts = {};
+  static bool isSeries(String id) => parts.containsKey(id);
+  static List<Movie> partsOf(String id) => parts[id] ?? [];
+  static int count(String id) => parts[id]?.length ?? 0;
 }
 
-/// استخراج اسم السلسلة: إنجليزي فقط، بدون رموز، بدون and/the
 String seriesBase(String title) {
-var t = title.trim().split('\n').first.trim();
-t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
-t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
-t = t.replaceAll(RegExp(r'(?:part|جزء|الجزء)\s*:?\s*\S+', caseSensitive: false), ' ');
-t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
-t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
-const generic = ['the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your'];
-final words = <String>[];
-for (var w in t.split(RegExp(r'\s+'))) {
-w = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
-if (w.length < 3) continue;
-if (generic.contains(w)) continue;
-if (RegExp(r'^\d+$').hasMatch(w)) continue;
-words.add(w);
-}
-if (words.isEmpty) return '';
-return words.take(2).join('_');
+  var t = title.trim().split('\n').first.trim();
+  t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
+  t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
+  t = t.replaceAll(RegExp(r'(?:part|جزء|الجزء)\s*:?\s*\S+', caseSensitive: false), ' ');
+  t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
+  t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
+  const generic = ['the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your'];
+  final words = <String>[];
+  for (var w in t.split(RegExp(r'\s+'))) {
+    w = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+    if (w.length < 3) continue;
+    if (generic.contains(w)) continue;
+    if (RegExp(r'^\d+$').hasMatch(w)) continue;
+    words.add(w);
+  }
+  if (words.isEmpty) return '';
+  return words.take(2).join('_');
 }
 
 String seriesDisplayName(Movie m) {
-final b = seriesBase(m.title);
-return b.isEmpty ? m.title : b.replaceAll('_', ' ');
+  final b = seriesBase(m.title);
+  return b.isEmpty ? m.title : b.replaceAll('_', ' ');
 }
 
-/// تجميع ذكي: دمج الجودات + سلاسل (مع دمج بالكلمة المشتركة)
 List<Movie> groupMoviesSmart(List<Movie> all) {
-SeriesRegistry.parts.clear();
-final deduped = Smart.dedup(all);
-final clusters = <String, List<Movie>>{};
-final singles = <Movie>[];
-for (final m in deduped) {
-final b = seriesBase(m.title);
-if (b.isEmpty) { singles.add(m); continue; }
-clusters.putIfAbsent(b, () => []).add(m);
+  SeriesRegistry.parts.clear();
+  final deduped = Smart.dedup(all);
+  final clusters = <String, List<Movie>>{};
+  final singles = <Movie>[];
+  for (final m in deduped) {
+    final b = seriesBase(m.title);
+    if (b.isEmpty) { singles.add(m); continue; }
+    clusters.putIfAbsent(b, () => []).add(m);
+  }
+  final keys = clusters.keys.toList();
+  final parent = <String, String>{for (final k in keys) k: k};
+  String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
+  final wordSets = <String, Set<String>>{for (final k in keys) k: k.split('_').toSet()};
+  for (var i = 0; i < keys.length; i++) {
+    for (var j = i + 1; j < keys.length; j++) {
+      if (wordSets[keys[i]]!.any(wordSets[keys[j]]!.contains)) {
+        parent[find(keys[i])] = find(keys[j]);
+      }
+    }
+  }
+  final merged = <String, List<Movie>>{};
+  for (final k in keys) {
+    merged.putIfAbsent(find(k), () => []).addAll(clusters[k]!);
+  }
+  final result = <Movie>[...singles];
+  for (final list in merged.values) {
+    if (list.length >= 2) {
+      list.sort((a, b) => a.msgId.compareTo(b.msgId));
+      for (final m in list) { SeriesRegistry.parts[m.id] = list; }
+      result.add(list.first);
+    } else {
+      result.addAll(list);
+    }
+  }
+  result.sort((a, b) => b.date.compareTo(a.date));
+  return result;
 }
-// دمج المجموعات التي تشترك بأي كلمة (fast_furious + furious + bourne_supremacy + bourne_ultimatum)
-final keys = clusters.keys.toList();
-final parent = <String, String>{for (final k in keys) k: k};
-String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
-final wordSets = <String, Set<String>>{for (final k in keys) k: k.split('_').toSet()};
-for (var i = 0; i < keys.length; i++) {
-for (var j = i + 1; j < keys.length; j++) {
-if (wordSets[keys[i]]!.any(wordSets[keys[j]]!.contains)) {
-parent[find(keys[i])] = find(keys[j]);
-}
-}
-}
-final merged = <String, List<Movie>>{};
-for (final k in keys) {
-merged.putIfAbsent(find(k), () => []).addAll(clusters[k]!);
-}
-final result = <Movie>[...singles];
-for (final list in merged.values) {
-if (list.length >= 2) {
-list.sort((a, b) => a.msgId.compareTo(b.msgId));
-for (final m in list) { SeriesRegistry.parts[m.id] = list; }
-result.add(list.first);
-} else {
-result.addAll(list);
-}
-}
-result.sort((a, b) => b.date.compareTo(a.date));
-return result;
+
+/* ============================================================
+   ✅ النسخ الاحتياطي الخارجي
+   ============================================================ */
+class Backup {
+  static const _ch = MethodChannel('tele_cinema/device');
+
+  static Future<String> exportAll() async {
+    try {
+      final data = await Store.exportAll();
+      final ok = await _ch.invokeMethod('saveToDownloads', {
+        'name': 'telecinema_backup.json',
+        'content': jsonEncode(data),
+      });
+      return ok == true
+          ? '✅ تم حفظ telecinema_backup.json في مجلد التنزيلات'
+          : '❌ فشل الحفظ';
+    } catch (e) {
+      return '❌ خطأ: $e';
+    }
+  }
+
+  static Future<String> importAll() async {
+    try {
+      final content = await _ch.invokeMethod('readFromDownloads', {
+        'name': 'telecinema_backup.json',
+      });
+      if (content == null || content.toString().isEmpty) {
+        return '❌ ضع ملف telecinema_backup.json في مجلد Download أولاً';
+      }
+      await Store.importAll(
+          Map<String, dynamic>.from(jsonDecode(content.toString()) as Map));
+      return '✅ تم الاستيراد بنجاح (قنوات + قوائم + مواضع المشاهدة)';
+    } catch (e) {
+      return '❌ فشل الاستيراد: $e';
+    }
+  }
 }
