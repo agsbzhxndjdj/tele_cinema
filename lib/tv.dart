@@ -81,7 +81,6 @@ class _TvHomeState extends State<TvHome> {
   List<Movie> _popular = [];
   final _searchCtrl = TextEditingController();
 
-  // 🔥 إضافة جديدة: متغيرات تجميع السلاسل عبر TMDB
   List<Movie> _groupedMovies = [];
   bool _isGrouping = false;
 
@@ -90,7 +89,7 @@ class _TvHomeState extends State<TvHome> {
     super.initState();
     if (Store.channels().isNotEmpty && Store.all().isEmpty) _refresh();
     _loadPopular();
-    _processSeries(); // 🔥 إضافة جديدة: تجميع السلاسل عند الفتح
+    _processSeries();
   }
 
   @override
@@ -99,7 +98,6 @@ class _TvHomeState extends State<TvHome> {
     super.dispose();
   }
 
-  // 🔥 إضافة جديدة: دالة تجميع السلاسل عبر TMDB
   Future<void> _processSeries() async {
     if (!Store.getBool('autoGroupSeries', true)) {
       setState(() => _groupedMovies = []);
@@ -131,10 +129,9 @@ class _TvHomeState extends State<TvHome> {
       } catch (_) {}
     }
     if (mounted) setState(() => _busy = false);
-    await _processSeries(); // 🔥 إضافة جديدة: إعادة التجميع بعد التحديث
+    await _processSeries();
   }
 
-  /* ✅ الأكثر مشاهدة */
   Future _loadPopular() async {
     try {
       final items = await Smart.popular();
@@ -193,8 +190,8 @@ class _TvHomeState extends State<TvHome> {
                         if (p.movies.isNotEmpty) {
                           await Store.addChannel(Channel(u, title: p.title, avatar: p.avatar));
                           await Store.saveMovies(u, p.movies);
-                          BulkLoader.loadAll(u); // 🔥 إضافة جديدة: التحميل الفوري للأفلام
-                          await _processSeries(); // 🔥 إضافة جديدة: إعادة التجميع
+                          BulkLoader.loadAll(u);
+                          await _processSeries();
                         }
                       } catch (_) {}
                     }
@@ -205,7 +202,6 @@ class _TvHomeState extends State<TvHome> {
         )));
   }
 
-  /* ✅ فيلم عشوائي */
   void _random() {
     final all = Store.all();
     if (all.isEmpty) return;
@@ -249,7 +245,6 @@ class _TvHomeState extends State<TvHome> {
   }
 
   List<Movie> _baseList() {
-    // 🔥 إضافة جديدة: استخدام الأفلام المجمعة عبر TMDB إذا كانت متاحة
     final source = (_groupedMovies.isNotEmpty && Store.getBool('autoGroupSeries', true)) ? _groupedMovies : Store.all();
     switch (_tab) {
       case 'cont': return source.where(_inProgress).toList();
@@ -286,7 +281,6 @@ class _TvHomeState extends State<TvHome> {
     );
   }
 
-  /* ✅ بانر اختيار اليوم */
   Widget _banner(Movie m) => Padding(
     padding: const EdgeInsets.fromLTRB(24, 10, 24, 6),
     child: InkWell(
@@ -328,7 +322,6 @@ class _TvHomeState extends State<TvHome> {
     itemBuilder: (_, i) => TvCard(m: list[i]),
   );
 
-  /* ✅ التحميلات المكتملة */
   Widget _downloads() {
     final entries = Store.downloads().entries.toList();
     if (entries.isEmpty) {
@@ -365,7 +358,6 @@ class _TvHomeState extends State<TvHome> {
       });
   }
 
-  /* ✅ القوائم المخصصة */
   Widget _listsView() {
     if (_openList != null) {
       final movies = Store.playlistMovies(_openList!);
@@ -421,7 +413,6 @@ class _TvHomeState extends State<TvHome> {
             Text(Lang.t('appName'), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.accent)),
             const Spacer(),
             if (_busy || _isGrouping) const Padding(padding: EdgeInsets.only(right: 12), child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70))),
-            // 🔥 إضافة جديدة: زر تجميع السلاسل عبر TMDB
             IconButton(
               icon: Icon(_isGrouping ? Icons.hourglass_top : Icons.movie_filter, color: Store.getBool('autoGroupSeries', true) ? AppTheme.accent : Colors.white70, size: 26),
               tooltip: 'تجميع السلاسل (TMDB)',
@@ -442,7 +433,6 @@ class _TvHomeState extends State<TvHome> {
             const SizedBox(width: 6),
             FilledButton.icon(onPressed: _addDialog, icon: const Icon(Icons.add_link, size: 20), label: Text(Lang.t('addChannel'), style: const TextStyle(fontSize: 14)), style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1B2430), foregroundColor: Colors.white, minimumSize: const Size(0, 44), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))),
           ])),
-          // 🔥 إضافة جديدة: شريط بحث محسّن (أكثر وضوحاً)
           if (_searching) Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
             child: TextField(
@@ -530,7 +520,6 @@ class _TvCardState extends State<TvCard> {
     super.dispose();
   }
 
-  /* ✅ هل هذا فيلم جزء من سلسلة؟ */
   bool _isSeries(Movie m) {
     final raw = m.rawJson;
     return raw != null && raw['is_series'] == true;
@@ -551,11 +540,9 @@ class _TvCardState extends State<TvCard> {
               Container(decoration: const BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black87]))),
               Positioned(left: 8, right: 8, bottom: 8, child: Text(m.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
               if (m.quality.isNotEmpty) Positioned(top: 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text(m.quality, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)))),
-              /* ✅ شارة سلسلة */
               if (_isSeries(m)) Positioned(top: m.quality.isNotEmpty ? 30 : 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.movie_filter, size: 11, color: Colors.white), SizedBox(width: 3), Text('سلسلة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))]))),
               if (SeriesRegistry.isSeries(m.id)) Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
               if (Store.isFav(m.id)) Positioned(top: 6, left: 6, child: Icon(Icons.favorite, size: 16, color: Colors.red)),
-              /* ✅ شريط التقدم باتجاه LTR */
               if (pos > 0 && tot > 0) Positioned(left: 0, right: 0, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: pos / tot, minHeight: 4, backgroundColor: Colors.black54, valueColor: AlwaysStoppedAnimation(AppTheme.accent)))),
             ])))));
   }
@@ -589,7 +576,6 @@ class _TvDetailsState extends State<TvDetails> {
     }
   }
 
-  /* ✅ إضافة إلى القوائم المخصصة */
   void _listsDialog(Movie m) {
     showDialog(
       context: context,
@@ -666,7 +652,6 @@ class _TvDetailsState extends State<TvDetails> {
               ]),
             ])),
           ]),
-          /* ✅ أجزاء السلسلة (تظهر لأي فيلم من السلسلة) */
           if (SeriesRegistry.isSeries(m.id)) ...[
             const SizedBox(height: 28),
             Text('أجزاء السلسلة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.accent)),
@@ -902,7 +887,6 @@ class _TvPlayerState extends State<TvPlayer> {
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Row(children: [
                     Text(_fmt(pos), style: const TextStyle(fontSize: 13, color: Colors.white70)),
-                    /* ✅ شريط التقدم باتجاه LTR */
                     Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: dur.inSeconds == 0 ? 0 : pos.inSeconds / dur.inSeconds, minHeight: 5, backgroundColor: Colors.white24, valueColor: AlwaysStoppedAnimation(AppTheme.accent))))),
                     Text(_fmt(dur), style: const TextStyle(fontSize: 13, color: Colors.white70)),
                   ]),
@@ -933,7 +917,6 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF151B23),
         title: const Text('حذف القناة', style: TextStyle(color: Colors.white)),
-        // ✅ إصلاح: تم دمج النص العربي في سطر واحد مع \n الصحيح
         content: Text(
           'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).',
           style: const TextStyle(color: Colors.white70),
@@ -1011,7 +994,7 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
                     if (p.movies.isNotEmpty) {
                       await Store.addChannel(Channel(u, title: p.title, avatar: p.avatar));
                       await Store.saveMovies(u, p.movies);
-                      BulkLoader.loadAll(u); // 🔥 إضافة جديدة: التحميل الفوري للأفلام عند الإضافة
+                      BulkLoader.loadAll(u);
                       if (ctx.mounted) Navigator.pop(ctx);
                       setState(() {});
                     }
@@ -1161,7 +1144,6 @@ class _TvSeriesScreenState extends State<TvSeriesScreen> {
     final seriesTitle = (raw['series_title'] ?? widget.movie.title).toString();
     final partsInfo = (raw['parts_info'] as List?)?.cast<Map<String, dynamic>>() ?? [];
 
-    /* إذا ما فيه أجزاء، اعرضه كفيلم عادي */
     if (partsInfo.isEmpty) {
       return TvDetails(m: widget.movie);
     }
@@ -1268,7 +1250,6 @@ class _TvSeriesScreenState extends State<TvSeriesScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // ✅ إصلاح: دمج السطرين في سطر واحد مع \n الصحيح
                                 Text(
                                   title.split('\n').first.isEmpty ? 'الجزء $partNum' : title.split('\n').first,
                                   maxLines: 2,
@@ -1330,7 +1311,6 @@ class TvSeriesPartsScreen extends StatelessWidget {
                 Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text('الجزء ${i + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black))),
                   const SizedBox(height: 6),
-                  // ✅ إصلاح: دمج السطرين في سطر واحد مع \n الصحيح
                   Text(p.title.split('\n').first, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white)),
                 ])),
               ])),
