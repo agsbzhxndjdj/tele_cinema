@@ -933,6 +933,7 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF151B23),
         title: const Text('حذف القناة', style: TextStyle(color: Colors.white)),
+        // ✅ إصلاح: تم دمج النص العربي في سطر واحد مع \n الصحيح
         content: Text(
           'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).',
           style: const TextStyle(color: Colors.white70),
@@ -1267,6 +1268,7 @@ class _TvSeriesScreenState extends State<TvSeriesScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // ✅ إصلاح: دمج السطرين في سطر واحد مع \n الصحيح
                                 Text(
                                   title.split('\n').first.isEmpty ? 'الجزء $partNum' : title.split('\n').first,
                                   maxLines: 2,
@@ -1328,6 +1330,7 @@ class TvSeriesPartsScreen extends StatelessWidget {
                 Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text('الجزء ${i + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black))),
                   const SizedBox(height: 6),
+                  // ✅ إصلاح: دمج السطرين في سطر واحد مع \n الصحيح
                   Text(p.title.split('\n').first, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white)),
                 ])),
               ])),
