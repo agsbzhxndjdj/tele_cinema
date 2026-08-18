@@ -118,7 +118,8 @@ if (mounted) setState(() => _busy = false);
 }
 List<Movie> get _base {
 var src = App.scope.value == 'all' ? Store.all() : Store.moviesOf(App.scope.value);
-src = Smart.dedup(src);
+// src = Smart.dedup(src);  // معلّق
+// سنستخدم groupMoviesWithSeries في البناء مباشرة
 if (Store.getBool('hideWatched')) src = src.where((m) => !_isFinished(m)).toList();
 if (Store.getBool('kidsMode')) {
 src = src.where((m) {
@@ -272,7 +273,10 @@ SnackBar(content: Text('الجودة: ${m.quality}'), duration: const Duration(m
 }
 @override
 Widget build(BuildContext context) => Card(key: ValueKey('card_${m.id}_${Store.tick.value}'), clipBehavior: Clip.antiAlias, margin: const EdgeInsets.all(6),
-child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: m))),
+child: InkWell(onTap: () {
+  // إذا كان فيلم عادي، افتح التفاصيل
+  Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: m)));
+},
 child: Stack(fit: StackFit.expand, children: [
 m.poster.isNotEmpty
 ? (Store.getBool('heroFx', true)
@@ -1048,4 +1052,126 @@ IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), 
 ]),
 onTap: () { App.scope.value = c.username; App.tab.value = 0; })),
 ])));
+}
+
+/* ============================================================
+   ✅ شاشة عرض أجزاء السلسلة (تُلصق في نهاية ui.dart)
+   ============================================================ */
+
+class SeriesScreen extends StatefulWidget {
+  final SeriesItem series;
+  const SeriesScreen({super.key, required this.series});
+  
+  @override
+  State<SeriesScreen> createState() => _SeriesScreenState();
+}
+
+class _SeriesScreenState extends State<SeriesScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final parts = widget.series.parts ?? [];
+    final title = widget.series.seriesTitle ?? 'سلسلة';
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: const Color(0xFF0B0F14),
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: const Color(0xFF0B0F14),
+      body: parts.isEmpty
+          ? const Center(child: Text('لا توجد أجزاء', style: TextStyle(color: Colors.grey)))
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: parts.length,
+              itemBuilder: (context, i) {
+                final part = parts[i];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: const Color(0xFF1B2430),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: part)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          // رقم الجزء
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('الجزء', style: TextStyle(fontSize: 10, color: Colors.black)),
+                                Text('${i + 1}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // البوستر
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: part.poster.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: part.poster,
+                                    width: 50,
+                                    height: 75,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => Container(
+                                      width: 50,
+                                      height: 75,
+                                      color: const Color(0xFF0B0F14),
+                                      child: const Icon(Icons.movie),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 50,
+                                    height: 75,
+                                    color: const Color(0xFF0B0F14),
+                                    child: const Icon(Icons.movie, size: 24),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          // المعلومات
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  part.title.split('\n').first,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                                const SizedBox(height: 4),
+                                if (part.quality.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.accent.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(part.quality, style: TextStyle(fontSize: 11, color: AppTheme.accent)),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.play_circle_fill, color: AppTheme.accent, size: 36),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
 }
