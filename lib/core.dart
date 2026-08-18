@@ -241,6 +241,7 @@ class Tg {
 
   static Movie _build(String ch, int mid, String caption, int date, String dur, String size,
       {List<Map<String, String>>? alts, String? serverQuality, Map<String, dynamic>? rawJson}) {
+    // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
     final lines = caption.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
     final title = lines.isNotEmpty ? lines.first : 'فيديو #$mid';
     var quality = (serverQuality == null || serverQuality.isEmpty || serverQuality == 'جودة أخرى') ? '' : serverQuality;
@@ -750,6 +751,7 @@ class Tmdb {
   static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
 
   static String _cleanQuery(String title) {
+    // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
     var t = title.trim().split('\n').first.trim();
     t = t.replaceAll(RegExp(r'[\[\【】{}《》«»]'), ' ');
     t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
@@ -803,7 +805,7 @@ class Tmdb {
     return null;
   }
 
-  // 🔥 إضافة جديدة: جلب تفاصيل الفيلم للتحقق من السلاسل
+  // 🔥 إضافة: جلب تفاصيل الفيلم للتحقق من السلاسل
   static Future<Map<String, dynamic>?> getDetails(int movieId) async {
     try {
       final r = await _d.get('https://api.themoviedb.org/3/movie/$movieId', queryParameters: {
@@ -944,6 +946,7 @@ class SeriesItem {
 }
 
 String extractSeriesBase(String title) {
+  // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
   var t = title.trim().split('\n').first.trim();
   t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
   t = t.replaceAll(RegExp(r'\b(1080p|720p|480p|360p|4K|HD|FHD|Web-DL|BluRay|HDRip)\b', caseSensitive: false), ' ');
@@ -1024,6 +1027,7 @@ class SeriesRegistry {
 }
 
 String seriesBase(String title) {
+  // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
   var t = title.trim().split('\n').first.trim();
   t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
   t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
