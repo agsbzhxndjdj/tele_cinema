@@ -241,7 +241,6 @@ class Tg {
 
   static Movie _build(String ch, int mid, String caption, int date, String dur, String size,
       {List<Map<String, String>>? alts, String? serverQuality, Map<String, dynamic>? rawJson}) {
-    // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
     final lines = caption.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
     final title = lines.isNotEmpty ? lines.first : 'فيديو #$mid';
     var quality = (serverQuality == null || serverQuality.isEmpty || serverQuality == 'جودة أخرى') ? '' : serverQuality;
@@ -751,7 +750,6 @@ class Tmdb {
   static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
 
   static String _cleanQuery(String title) {
-    // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
     var t = title.trim().split('\n').first.trim();
     t = t.replaceAll(RegExp(r'[\[\【】{}《》«»]'), ' ');
     t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
@@ -805,7 +803,6 @@ class Tmdb {
     return null;
   }
 
-  // 🔥 إضافة: جلب تفاصيل الفيلم للتحقق من السلاسل
   static Future<Map<String, dynamic>?> getDetails(int movieId) async {
     try {
       final r = await _d.get('https://api.themoviedb.org/3/movie/$movieId', queryParameters: {
@@ -931,10 +928,6 @@ class Sorter {
   }
 }
 
-/* ============================================================
-✅ إضافات منطق السلاسل والدمج
-============================================================ */
-
 class SeriesItem {
   final bool isSeries;
   final Movie? movie;
@@ -946,7 +939,6 @@ class SeriesItem {
 }
 
 String extractSeriesBase(String title) {
-  // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
   var t = title.trim().split('\n').first.trim();
   t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
   t = t.replaceAll(RegExp(r'\b(1080p|720p|480p|360p|4K|HD|FHD|Web-DL|BluRay|HDRip)\b', caseSensitive: false), ' ');
@@ -1015,10 +1007,6 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
   return result;
 }
 
-/* ============================================================
-✅ السلاسل الذكية المحسّنة
-============================================================ */
-
 class SeriesRegistry {
   static final Map<String, List<Movie>> parts = {};
   static bool isSeries(String id) => parts.containsKey(id);
@@ -1027,7 +1015,6 @@ class SeriesRegistry {
 }
 
 String seriesBase(String title) {
-  // ✅ إصلاح: استبدال السطر الجديد الفعلي بـ \n الصحيح
   var t = title.trim().split('\n').first.trim();
   t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
   t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
@@ -1097,10 +1084,6 @@ List<Movie> groupMoviesSmart(List<Movie> all) {
   return result;
 }
 
-/* ============================================================
-✅ محرك تجميع السلاسل الذكي عبر TMDB (Client-Side)
-============================================================ */
-
 class SeriesGrouper {
   static final RegExp _partRegex = RegExp(r'(part|جزء|الجزء)\s*(\d+)', caseSensitive: false);
 
@@ -1108,7 +1091,6 @@ class SeriesGrouper {
     final Map<String, List<Movie>> potentialSeries = {};
     final List<Movie> standalone = [];
 
-    // 1. تجميع مبدئي للأفلام التي تحتوي على كلمات "Part/جزء"
     for (final m in movies) {
       final match = _partRegex.firstMatch(m.title);
       if (match != null) {
@@ -1126,14 +1108,12 @@ class SeriesGrouper {
 
     final List<Movie> result = [...standalone];
 
-    // 2. التحقق عبر TMDB للمجموعات المحتملة
     for (final entry in potentialSeries.entries) {
       if (entry.value.length < 2) {
         result.addAll(entry.value);
         continue;
       }
 
-      // ترتيب الأجزاء تصاعدياً
       final sortedParts = entry.value
         ..sort((a, b) {
           final matchA = _partRegex.firstMatch(a.title);
@@ -1143,7 +1123,6 @@ class SeriesGrouper {
           return numA.compareTo(numB);
         });
 
-      // التحقق من TMDB لأول فيلم
       final firstMovie = sortedParts.first;
       final searchResult = await Tmdb.search(firstMovie.title);
 
@@ -1151,7 +1130,6 @@ class SeriesGrouper {
         final details = await Tmdb.getDetails(searchResult['id'] as int);
         final collection = details?['belongs_to_collection'];
 
-        // إذا أكد TMDB أنها سلسلة رسمية
         if (collection != null && collection['name'] != null) {
           final collectionName = collection['name'].toString();
 
@@ -1179,7 +1157,6 @@ class SeriesGrouper {
         }
       }
 
-      // إذا فشل التحقق من TMDB
       result.addAll(sortedParts);
     }
 
@@ -1187,10 +1164,6 @@ class SeriesGrouper {
     return result;
   }
 }
-
-/* ============================================================
-✅ النسخ الاحتياطي الخارجي
-============================================================ */
 
 class Backup {
   static const _ch = MethodChannel('tele_cinema/device');
@@ -1203,10 +1176,10 @@ class Backup {
         'content': jsonEncode(data),
       });
       return ok == true
-          ? '✅ تم حفظ telecinema_backup.json في مجلد التنزيلات'
-          : '❌ فشل الحفظ';
+          ? 'تم حفظ telecinema_backup.json في مجلد التنزيلات'
+          : 'فشل الحفظ';
     } catch (e) {
-      return '❌ خطأ: $e';
+      return 'خطأ: $e';
     }
   }
 
@@ -1216,13 +1189,13 @@ class Backup {
         'name': 'telecinema_backup.json',
       });
       if (content == null || content.toString().isEmpty) {
-        return '❌ ضع ملف telecinema_backup.json في مجلد Download أولاً';
+        return 'ضع ملف telecinema_backup.json في مجلد Download أولاً';
       }
       await Store.importAll(
           Map<String, dynamic>.from(jsonDecode(content.toString()) as Map));
-      return '✅ تم الاستيراد بنجاح (قنوات + قوائم + مواضع المشاهدة)';
+      return 'تم الاستيراد بنجاح (قنوات + قوائم + مواضع المشاهدة)';
     } catch (e) {
-      return '❌ فشل الاستيراد: $e';
+      return 'فشل الاستيراد: $e';
     }
   }
 }
