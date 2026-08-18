@@ -78,8 +78,7 @@ class _HomePageState extends State<HomePage> {
   bool _busy = false, _searching = false;
   String _fq = '', _fg = '';
   List<Movie> _popular = [], _reco = [];
-
-  // 🔥 إضافة جديدة: متغيرات تجميع السلاسل عبر TMDB
+  
   List<Movie> _groupedMovies = [];
   bool _isGrouping = false;
 
@@ -88,7 +87,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     if (Store.channels().isNotEmpty && Store.all().isEmpty) _refresh();
     _loadSmart();
-    _processSeries(); // 🔥 إضافة جديدة: تجميع السلاسل عند الفتح
+    _processSeries();
     Downloader.wifiBlocked.addListener(_wifiToast);
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
@@ -98,7 +97,6 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  // 🔥 إضافة جديدة: دالة تجميع السلاسل عبر TMDB
   Future<void> _processSeries() async {
     if (!Store.getBool('autoGroupSeries', true)) {
       if (mounted) setState(() => _groupedMovies = []);
@@ -152,12 +150,11 @@ class _HomePageState extends State<HomePage> {
       await BulkLoader.loadAll(c.username);
     }
     await _loadSmart();
-    await _processSeries(); // 🔥 إضافة جديدة: إعادة التجميع بعد التحديث
+    await _processSeries();
     if (mounted) setState(() => _busy = false);
   }
 
   List<Movie> get _base {
-    // 🔥 إضافة جديدة: استخدام الأفلام المجمعة عبر TMDB إذا كانت متاحة
     var src = App.scope.value == 'all'
         ? (_groupedMovies.isNotEmpty && Store.getBool('autoGroupSeries', true)
             ? _groupedMovies
@@ -206,9 +203,8 @@ class _HomePageState extends State<HomePage> {
     final listView = Store.getBool('listView');
     return Scaffold(
       appBar: AppBar(title: Text(Lang.t('appName')), actions: [
-        IconButton(icon: const Icon(Icons.search, size: 28), onPressed: () => setState(() => _searching = !_searching)), // 🔥 تعديل: حجم أيقونة أكبر
+        IconButton(icon: const Icon(Icons.search, size: 28), onPressed: () => setState(() => _searching = !_searching)),
         IconButton(icon: const Icon(Icons.casino), onPressed: _random),
-        // 🔥 إضافة جديدة: زر تجميع السلاسل عبر TMDB
         IconButton(
           icon: Icon(_isGrouping ? Icons.hourglass_top : Icons.movie_filter_outlined, color: Store.getBool('autoGroupSeries', true) ? AppTheme.accent : null),
           tooltip: 'تجميع السلاسل (TMDB)',
@@ -244,14 +240,13 @@ class _HomePageState extends State<HomePage> {
         IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
         IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
       ],
-      // 🔥 تعديل: شريط بحث ثابت وواضح دائماً
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(56),
         child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
           child: TextField(controller: _search, onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               hintText: Lang.t('searchHint'),
-              prefixIcon: Icon(Icons.search, color: AppTheme.accent, size: 28), // 🔥 تعديل: أيقونة واضحة
+              prefixIcon: Icon(Icons.search, color: AppTheme.accent, size: 28),
               suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (_search.text.isNotEmpty)
                   IconButton(icon: const Icon(Icons.clear, size: 20), onPressed: () { _search.clear(); setState(() {}); }),
@@ -278,7 +273,6 @@ class _HomePageState extends State<HomePage> {
                     const SizedBox(width: 8),
                     Expanded(child: Text(status, style: TextStyle(fontSize: 11, color: AppTheme.accent))),
                   ])),
-              // 🔥 إضافة جديدة: مؤشر تجميع السلاسل
               if (_isGrouping)
                 Container(width: double.infinity, color: Colors.purple.withOpacity(0.15),
                   padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
@@ -396,7 +390,6 @@ class MovieCard extends StatelessWidget {
               Positioned(top: 6, left: 6, child: Icon(Icons.push_pin, size: 16, color: AppTheme.accent)),
             if (m.duration.isNotEmpty)
               Positioned(bottom: 30, left: 6, child: Text(m.duration, style: const TextStyle(fontSize: 9, color: Colors.white70))),
-            /* ✅ شريط التقدم باتجاه LTR */
             if (_inProgress(m))
               Positioned(left: 6, right: 6, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: Store.getPosition(m.id) / max(1, _durSec(m.duration)), minHeight: 3, valueColor: AlwaysStoppedAnimation(AppTheme.accent), backgroundColor: Colors.black54))),
             Positioned(top: 48, left: 4, child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -935,7 +928,6 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                         IconButton(icon: const Icon(Icons.forward_10, color: Colors.white70), onPressed: () => _jump(10)),
                         IconButton(tooltip: Lang.t('skipIntro'), icon: const Icon(Icons.double_arrow, color: Colors.white70), onPressed: () => _jump(85)),
                       ]),
-                      /* ✅ شريط التقدم والأوقات باتجاه LTR */
                       Directionality(textDirection: TextDirection.ltr, child: Row(children: [
                         Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(_fmt(pos), style: const TextStyle(fontSize: 11, color: Colors.white70))),
                         Expanded(child: SliderTheme(
@@ -1059,7 +1051,6 @@ class DownloadsPage extends StatelessWidget {
                 Text('${(p * 100).round()}%', style: TextStyle(fontSize: 12, color: AppTheme.accent, fontWeight: FontWeight.bold)),
               ]),
               const SizedBox(height: 8),
-              /* ✅ شريط تقدم التحميل باتجاه LTR */
               Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: p, minHeight: 5, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation(AppTheme.accent))),
               const SizedBox(height: 6),
               Row(children: [
@@ -1130,7 +1121,7 @@ class _ChannelsPageState extends State<ChannelsPage> {
       } else {
         await Store.addChannel(Channel(u, title: p.title, avatar: p.avatar));
         await Store.saveMovies(u, p.movies);
-        await BulkLoader.loadAll(u); // 🔥 تعديل: await لضمان التحميل الكامل قبل الانتقال
+        await BulkLoader.loadAll(u);
         _ctrl.clear();
         App.scope.value = u;
         App.tab.value = 0;
@@ -1213,7 +1204,7 @@ class SeriesPartsScreen extends StatelessWidget {
             child: ListTile(
               leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: p.poster.isNotEmpty ? CachedNetworkImage(imageUrl: p.poster, width: 55, height: 80, fit: BoxFit.cover, errorWidget: (_, __, ___) => const Icon(Icons.movie)) : const Icon(Icons.movie)),
               title: Text('الجزء ${i + 1}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
-              // ✅ إصلاح: السطر الذي كان مكسوراً (split مع newline فعلي)
+              // ✅ تم الإصلاح: دمج السطرين في سطر واحد باستخدام \n
               subtitle: Text(p.title.split('\n').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.white70)),
               trailing: p.quality.isNotEmpty ? Chip(label: Text(p.quality, style: const TextStyle(fontSize: 10)), backgroundColor: AppTheme.accent.withOpacity(0.2)) : null,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: p))),
