@@ -160,13 +160,13 @@ jobs:
           flutter pub run flutter_launcher_icons:main
 
       # ✅✅✅ إصلاح شامل ومضمون لملفات Dart (طريقة الاستبدال المباشر) ✅✅✅
-      - name: Fix Dart files (Direct Replace Method)
+      - - name: Fix broken string literals in Dart files
         run: |
           python3 << 'PYEOF'
           import os
-          
+
           files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
-          
+
           for filepath in files:
               if not os.path.exists(filepath):
                   continue
@@ -176,25 +176,19 @@ jobs:
                   
               original = content
               
-              # 1. إصلاح split و join المكسورة (استبدال مباشر)
+              # 1. إصلاح split و join المكسورة (استبدال سطر جديد فعلي بـ \n صحيح)
               content = content.replace("split('\n')", "split('\\n')")
-              content = content.replace("join('\n')", "join('\\n')")
               content = content.replace('split("\n")', 'split("\\n")')
+              content = content.replace("join('\n')", "join('\\n')")
               content = content.replace('join("\n")', 'join("\\n")')
               
-              # 2. إصلاح النصوص العربية متعددة الأسطر (استبدال مباشر)
-              # في tv.dart: رسالة تأكيد الحذف
-              old_str1 = """'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟
-          سيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).'"""
-              new_str1 = "'هل أنت متأكد من حذف \\"${c.title.isEmpty ? c.username : c.title}\\"؟\\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).'"
-              content = content.replace(old_str1, new_str1)
+              # 2. إصلاح النص العربي متعدد الأسطر في tv.dart (استبدال السطر الجديد الفعلي بـ \n)
+              content = content.replace('؟\nسيتم حذف', '؟\\nسيتم حذف')
               
-              # في core.dart و tv.dart: title.split
-              content = content.replace("title.split('\n').first", "title.split('\\n').first")
-              
-              # 3. إصلاح rawJson cast
+              # 3. إصلاح مشكلة rawJson cast في core.dart
               content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
-              
+              content = content.replace('rawJson: item)', 'rawJson: Map<String, dynamic>.from(item))')
+
               if content != original:
                   with open(filepath, 'w', encoding='utf-8') as f:
                       f.write(content)
@@ -204,10 +198,6 @@ jobs:
                   
           print('✅ ALL DART FILES FIXED')
           PYEOF
-
-          echo "=== التحقق من الإصلاح ==="
-          grep -n "split" lib/core.dart | head -5
-
       - name: Build MOBILE APK
         run: |
           flutter build apk --release -t lib/main.dart
