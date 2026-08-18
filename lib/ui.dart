@@ -158,46 +158,119 @@ for (final m in movies) genres.addAll(m.genres.take(3));
 final today = movies.isEmpty ? null : movies[(DateTime.now().millisecondsSinceEpoch ~/ 86400000) % movies.length];
 final listView = Store.getBool('listView');
 return Scaffold(
-appBar: AppBar(title: Text(Lang.t('appName')), actions: [SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize: MainAxisSize.min, children: [
-IconButton(icon: const Icon(Icons.search), onPressed: () => setState(() => _searching = !_searching)),
-IconButton(icon: const Icon(Icons.casino), onPressed: _random),
-PopupMenuButton<String>(
-icon: const Icon(Icons.sort),
-onSelected: (v) async { await Store.setSortMode(v); setState(() {}); },
-itemBuilder: (_) => [
-_sortItem('default', 'الأحدث أولاً'),
-_sortItem('az', 'أبجدي (ذكي)'),
-_sortItem('year_desc', 'السنة: الأحدث'),
-_sortItem('year_asc', 'السنة: الأقدم'),
-_sortItem('size_desc', 'الحجم: الأكبر'),
-_sortItem('size_asc', 'الحجم: الأصغر'),
-_sortItem('smart', '✨ ذكي (حسب ذوقك)'),
-],
+appBar: AppBar(
+  title: Text(Lang.t('appName')),
+  actions: [
+    SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => setState(() => _searching = !_searching),
+          ),
+          IconButton(
+            icon: const Icon(Icons.casino),
+            onPressed: _random,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort),
+            onSelected: (v) async {
+              await Store.setSortMode(v);
+              setState(() {});
+            },
+            itemBuilder: (_) => [
+              _sortItem('default', 'الأحدث أولاً'),
+              _sortItem('az', 'أبجدي (ذكي)'),
+              _sortItem('year_desc', 'السنة: الأحدث'),
+              _sortItem('year_asc', 'السنة: الأقدم'),
+              _sortItem('size_desc', 'الحجم: الأكبر'),
+              _sortItem('size_asc', 'الحجم: الأصغر'),
+              _sortItem('smart', '✨ ذكي (حسب ذوقك)'),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.explore_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DiscoverScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.emoji_events_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AchievementsScreen()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.movie_filter_outlined),
+            tooltip: 'السلاسل',
+            onPressed: () {
+              final seriesOnly = groupMoviesSmart(Store.all())
+                  .where((mm) => SeriesRegistry.isSeries(mm.id))
+                  .toList();
+              if (seriesOnly.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('لا توجد سلاسل حالياً')),
+                );
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AllSeriesGrid(reps: seriesOnly),
+                ),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsPage()),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refresh,
+          ),
+        ],
+      ),
+    ),
+  ],
+  bottom: _searching
+      ? PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: TextField(
+              controller: _search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: Lang.t('searchHint'),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    Icons.tune,
+                    color: Filters.active ? AppTheme.accent : Colors.grey,
+                  ),
+                  onPressed: () async {
+                    await showDialog(
+                      context: context,
+                      builder: (_) => const AdvancedFilterDialog(),
+                    );
+                    setState(() {});
+                  },
+                ),
+              ),
+            ),
+          ),
+        )
+      : null,
 ),
-IconButton(icon: const Icon(Icons.explore_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
-IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
-IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
-IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () {
-final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
-if (seriesOnly.isEmpty) {
-ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
-return;
-}
-Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
-}),
-IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
-IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
-IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
-])], bottom: _searching
-? PreferredSize(preferredSize: const Size.fromHeight(56),
-child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-child: TextField(controller: _search, onChanged: (_) => setState(() {}),
-decoration: InputDecoration(hintText: Lang.t('searchHint'), prefixIcon: const Icon(Icons.search),
-suffixIcon: IconButton(icon: Icon(Icons.tune, color: Filters.active ? AppTheme.accent : Colors.grey),
-onPressed: () async {
-await showDialog(context: context, builder: (_) => const AdvancedFilterDialog());
-setState(() {});
-}),
+   
 filled: true, fillColor: const Color(0xFF151B23), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none)))))
 : null),
 body: Stack(children: [
