@@ -1166,3 +1166,94 @@ Icon(Icons.play_circle_fill, color: AppTheme.accent, size: 36),
 );
 }
 }
+
+/* ============================================================
+   ✅ شاشة عرض أجزاء السلسلة للتلفزيون (تُلصق في نهاية tv.dart)
+   ============================================================ */
+
+class TvSeriesScreen extends StatefulWidget {
+  final SeriesItem series;
+  const TvSeriesScreen({super.key, required this.series});
+  
+  @override
+  State<TvSeriesScreen> createState() => _TvSeriesScreenState();
+}
+
+class _TvSeriesScreenState extends State<TvSeriesScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final parts = widget.series.parts ?? [];
+    final title = widget.series.seriesTitle ?? 'سلسلة';
+    
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B0F14),
+      appBar: AppBar(
+        title: Text(title, style: TextStyle(color: AppTheme.accent)),
+        backgroundColor: const Color(0xFF0B0F14),
+        foregroundColor: Colors.white,
+      ),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(24),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: (MediaQuery.of(context).size.width / 250).floor().clamp(2, 6),
+          childAspectRatio: 0.7,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: parts.length,
+        itemBuilder: (context, i) {
+          final part = parts[i];
+          return Card(
+            color: const Color(0xFF1B2430),
+            child: InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => TvDetails(m: part)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: part.poster.isNotEmpty
+                        ? CachedNetworkImage(imageUrl: part.poster, fit: BoxFit.cover)
+                        : const Icon(Icons.movie, size: 60, color: Colors.white54),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'الجزء ${i + 1}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          part.title.split('\n').first,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, color: Colors.white),
+                        ),
+                        if (part.quality.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(part.quality, style: TextStyle(fontSize: 11, color: AppTheme.accent)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
