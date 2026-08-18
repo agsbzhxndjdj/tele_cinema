@@ -1175,3 +1175,83 @@ class _SeriesScreenState extends State<SeriesScreen> {
     );
   }
 }
+
+class AllSeriesScreen extends StatelessWidget {
+  final List<SeriesItem> items;
+  const AllSeriesScreen({super.key, required this.items});
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('كل السلاسل'),
+        backgroundColor: const Color(0xFF0B0F14),
+        foregroundColor: Colors.white,
+      ),
+      backgroundColor: const Color(0xFF0B0F14),
+      body: GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 0.6,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: items.length,
+        itemBuilder: (context, i) {
+          final item = items[i];
+          final firstMovie = item.parts?.first;
+          return Card(
+            color: const Color(0xFF1B2430),
+            child: InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => SeriesScreen(series: item)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: firstMovie?.poster.isNotEmpty == true
+                        ? CachedNetworkImage(imageUrl: firstMovie!.poster, fit: BoxFit.cover)
+                        : const Icon(Icons.movie_filter, size: 40),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.seriesTitle ?? 'سلسلة',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.purple,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '${item.parts?.length ?? 0} أجزاء',
+                              style: const TextStyle(fontSize: 10, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
