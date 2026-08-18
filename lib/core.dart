@@ -1065,8 +1065,7 @@ clusters.putIfAbsent(b, () => []).add(m);
 // دمج المجموعات التي تشترك بأي كلمة (fast_furious + furious + bourne_supremacy + bourne_ultimatum)
 final keys = clusters.keys.toList();
 final parent = <String, String>{for (final k in keys) k: k};
-String find(String x) {
-while (parent[x] != x) { parent[x] = parent[parent[x]]!; x = parent[x]; }
+String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
 return x;
 }
 final wordSets = <String, Set<String>>{for (final k in keys) k: k.split('_').toSet()};
