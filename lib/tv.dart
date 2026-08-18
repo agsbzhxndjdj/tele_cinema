@@ -208,8 +208,8 @@ switch (_tab) {
 case 'cont': return Store.all().where(_inProgress).toList();
 case 'seen': return Store.history();
 case 'fav': return Store.favorites();
-case 'all': return Store.all();
-default: return Store.moviesOf(_tab);
+case 'all': return groupMoviesSmart(Store.all());
+default: return groupMoviesSmart(Store.moviesOf(_tab));
 }
 }
 List<Movie> _displayList() {
@@ -447,14 +447,7 @@ final pos = Store.getPosition(m.id);
 final tot = _durSec(m.duration);
 return AnimatedScale(scale: _on ? 1.07 : 1, duration: const Duration(milliseconds: 160),
 child: Focus(focusNode: _f, onFocusChange: (h) { if (h) Scrollable.ensureVisible(context, alignment: 0.5, duration: const Duration(milliseconds: 200)); },
-child: InkWell(onTap: () {
-/* ✅ إذا سلسلة افتح شاشة الأجزاء، وإلا التفاصيل */
-if (_isSeries(m)) {
-Navigator.push(context, MaterialPageRoute(builder: (_) => TvSeriesScreen(movie: m)));
-} else {
-Navigator.push(context, MaterialPageRoute(builder: (_) => TvDetails(m: m)));
-}
-},
+child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SeriesRegistry.isSeries(m.id) ? TvSeriesPartsScreen(m: m) : TvDetails(m: m))),
 child: Container(margin: const EdgeInsets.all(4),
 decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: _on ? AppTheme.accent : Colors.transparent, width: 3), color: const Color(0xFF1B2430)),
 child: ClipRRect(borderRadius: BorderRadius.circular(10), child: Stack(fit: StackFit.expand, children: [
@@ -464,6 +457,7 @@ Positioned(left: 8, right: 8, bottom: 8, child: Text(m.title, maxLines: 2, overf
 if (m.quality.isNotEmpty) Positioned(top: 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text(m.quality, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)))),
 /* ✅ شارة سلسلة */
 if (_isSeries(m)) Positioned(top: m.quality.isNotEmpty ? 30 : 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.movie_filter, size: 11, color: Colors.white), SizedBox(width: 3), Text('سلسلة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))]))),
+  if (SeriesRegistry.isSeries(m.id)) Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
 if (Store.isFav(m.id)) Positioned(top: 6, left: 6, child: Icon(Icons.favorite, size: 16, color: Colors.red)),
 /* ✅ شريط التقدم باتجاه LTR */
 if (pos > 0 && tot > 0) Positioned(left: 0, right: 0, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: pos / tot, minHeight: 4, backgroundColor: Colors.black54, valueColor: AlwaysStoppedAnimation(AppTheme.accent)))),
@@ -917,6 +911,8 @@ icon: Icon(Icons.add_circle, color: AppTheme.accent, size: 30),
 tooltip: 'إضافة قناة جديدة',
 onPressed: _addChannel,
 ),
+IconButton(icon: const Icon(Icons.upload_file, color: Colors.white70, size: 26), tooltip: 'تصدير', onPressed: () async { final r = await Backup.exportAll(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }),
+IconButton(icon: const Icon(Icons.download_file, color: Colors.white70, size: 26), tooltip: 'استيراد', onPressed: () async { final r = await Backup.importAll(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }),
 ],
 ),
 body: chs.isEmpty
@@ -1163,6 +1159,41 @@ Icon(Icons.play_circle_fill, color: AppTheme.accent, size: 36),
 ]),
 ),
 ]),
+);
+}
+}
+
+/* ============================================================
+   ✅ شاشة أجزاء السلسلة للتلفزيون (تُلصق في نهاية tv.dart)
+   ============================================================ */
+class TvSeriesPartsScreen extends StatelessWidget {
+final Movie m;
+const TvSeriesPartsScreen({super.key, required this.m});
+@override
+Widget build(BuildContext context) {
+final parts = SeriesRegistry.partsOf(m.id);
+return Scaffold(
+backgroundColor: const Color(0xFF0B0F14),
+appBar: AppBar(backgroundColor: const Color(0xFF0B0F14), foregroundColor: Colors.white, title: Text('سلسلة ${seriesDisplayName(m)} (${parts.length} أجزاء)', style: TextStyle(color: AppTheme.accent))),
+body: GridView.builder(
+padding: const EdgeInsets.all(24),
+gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: (MediaQuery.of(context).size.width / 220).floor().clamp(2, 6), childAspectRatio: 0.62, crossAxisSpacing: 14, mainAxisSpacing: 14),
+itemCount: parts.length,
+itemBuilder: (_, i) {
+final p = parts[i];
+return Card(color: const Color(0xFF1B2430), clipBehavior: Clip.antiAlias,
+child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TvDetails(m: p))),
+child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+Expanded(child: p.poster.isNotEmpty ? CachedNetworkImage(imageUrl: p.poster, fit: BoxFit.cover, errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 50)) : const Icon(Icons.movie, size: 50)),
+Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text('الجزء ${i + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black))),
+const SizedBox(height: 6),
+Text(p.title.split('\n').first, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white)),
+])),
+])),
+);
+},
+),
 );
 }
 }
