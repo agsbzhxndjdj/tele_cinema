@@ -176,7 +176,15 @@ _sortItem('smart', '✨ ذكي (حسب ذوقك)'),
 ),
 IconButton(icon: const Icon(Icons.explore_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
 IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
-  IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AllSeriesScreen()))),
+IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () {
+final allItems = groupMoviesWithSeries(Store.all());
+final seriesOnly = allItems.where((i) => i.isSeries).toList();
+if (seriesOnly.isEmpty) {
+ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
+return;
+}
+Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesScreen(items: seriesOnly)));
+}),
 IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
 ], bottom: _searching
