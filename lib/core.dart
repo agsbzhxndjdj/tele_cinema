@@ -231,8 +231,7 @@ alts.add({
 }
 movies.add(_build(user, mid, caption, date,
 (item['duration'] ?? '').toString(), (item['size'] ?? '').toString(),
-alts: alts, serverQuality: (item['quality'] ?? '').toString(), rawJson: item));  // ✅ جديد: حفظ rawJson
-}
+alts: alts, serverQuality: (item['quality'] ?? '').toString(), rawJson: Map<String, dynamic>.from(item)));
 return Page(movies, next, title, avatar);
 }
 static Future<List<Movie>> fetchNew(String user, {int? afterMsgId}) async {
@@ -246,9 +245,7 @@ return [];
 static Movie _build(String ch, int mid, String caption, int date,
 String dur, String size,
 {List<Map<String, String>>? alts, String? serverQuality, Map<String, dynamic>? rawJson}) {  // ✅ جديد
-final lines = caption
-.split('
-')
+final lines = caption.split('\n')
 .map((e) => e.trim())
 .where((e) => e.isNotEmpty)
 .toList();
@@ -286,8 +283,7 @@ msgId: mid,
 title: title,
 poster: posterUrl(ch, mid),
 videoUrl: streamUrl(ch, mid),
-description: desc.join('
-'),
+description: desc.join('\n'),
 genres: genres,
 quality: quality,
 size: size,
@@ -769,8 +765,7 @@ static final Dio _d = Dio(BaseOptions(
 connectTimeout: const Duration(seconds: 8),
 receiveTimeout: const Duration(seconds: 8)));
 static String _cleanQuery(String title) {
-var t = title.trim().split('
-').first.trim();
+var t = title.trim().split('\n').first.trim();
 t = t.replaceAll(RegExp(r'\[\【】{}《》«»]'), ' ');
 t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
 t = t.replaceAll(RegExp(
