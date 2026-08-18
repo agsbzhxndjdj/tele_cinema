@@ -908,3 +908,109 @@ class Sorter {
     return l;
   }
 }
+
+/* ============================================================
+   ✅ إضافات منطق السلاسل والدمج (تُلصق في نهاية core.dart)
+   ============================================================ */
+
+/// كائن يمثل إما فيلم عادي أو سلسلة
+class SeriesItem {
+  final bool isSeries;
+  final Movie? movie;  // للفيلم العادي
+  final String? seriesTitle;  // للسلسلة
+  final List<Movie>? parts;  // أجزاء السلسلة
+  
+  SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
+  SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
+}
+
+/// استخراج الاسم الأساسي للسلسلة من العنوان
+String extractSeriesBase(String title) {
+  var t = title.trim().split('\n').first.trim();
+  
+  // حذف الجودات والسنوات
+  t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
+  t = t.replaceAll(RegExp(r'\b(1080p|720p|480p|360p|4K|HD|FHD|Web-DL|BluRay|HDRip)\b', caseSensitive: false), ' ');
+  
+  // حذف أرقام الأجزاء
+  t = t.replaceAll(RegExp(r'(?:Part|جزء|الجزء)\s*:?\s*\w+', caseSensitive: false), ' ');
+  t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
+  t = t.replaceAll(RegExp(r'\b\d{1,2}\s*$'), ' ');
+  
+  // فك الكلمات الملتصقة (camelCase)
+  t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
+  
+  // حذف الكلمات العامة
+  final words = t.split(RegExp(r'\s+')).where((w) => w.length >= 3).toList();
+  final generic = {'the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it'};
+  final filtered = words.where((w) => !generic.contains(w.toLowerCase())).toList();
+  
+  if (filtered.isEmpty) return '';
+  return filtered.take(2).join('_').toLowerCase();
+}
+
+/// دمج الجودات + اكتشاف السلاسل (بديل عن Smart.dedup)
+List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
+  // 1. دمج الجودات المتطابقة (نفس منطق Smart.dedup)
+  final seen = <String, Movie>{};
+  final deduped = <Movie>[];
+  
+  for (final m in all) {
+    final k = Smart.titleKey(m.title);
+    if (k.isEmpty) {
+      deduped.add(m);
+      continue;
+    }
+    final e = seen[k];
+    if (e == null) {
+      seen[k] = m;
+      deduped.add(m);
+    } else {
+      e.absorb(m);
+    }
+  }
+  
+  // 2. اكتشاف السلاسل
+  final seriesMap = <String, List<Movie>>{};
+  final nonSeries = <Movie>[];
+  
+  for (final m in deduped) {
+    final base = extractSeriesBase(m.title);
+    if (base.isNotEmpty && base.length >= 4) {
+      seriesMap.putIfAbsent(base, () => []).add(m);
+    } else {
+      nonSeries.add(m);
+    }
+  }
+  
+  // 3. بناء النتيجة
+  final result = <SeriesItem>[];
+  
+  // الأفلام العادية
+  for (final m in nonSeries) {
+    result.add(SeriesItem.movie(m));
+  }
+  
+  // السلاسل
+  for (final entry in seriesMap.entries) {
+    final parts = entry.value;
+    if (parts.length >= 2) {
+      // هذه سلسلة حقيقية
+      parts.sort((a, b) => a.msgId.compareTo(b.msgId));
+      final title = entry.key.replaceAll('_', ' ');
+      result.add(SeriesItem.series(title, parts));
+    } else {
+      // جزء واحد فقط - فيلم عادي
+      result.add(SeriesItem.movie(parts.first));
+    }
+  }
+  
+  // ترتيب حسب التاريخ (الأحدث أولاً)
+  result.sort((a, b) {
+    final dateA = a.isSeries ? (a.parts?.first.date ?? 0) : (a.movie?.date ?? 0);
+    final dateB = b.isSeries ? (b.parts?.first.date ?? 0) : (b.movie?.date ?? 0);
+    return dateB.compareTo(dateA);
+  });
+  
+  return result;
+}
