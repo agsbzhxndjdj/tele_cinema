@@ -160,7 +160,7 @@ jobs:
           flutter pub run flutter_launcher_icons:main
 
       # ✅✅✅ إصلاح شامل ومضمون لملفات Dart (طريقة الاستبدال المباشر) ✅✅✅
-      - - name: Fix broken string literals in Dart files
+      - name: Fix broken string literals in Dart files
         run: |
           python3 << 'PYEOF'
           import os
