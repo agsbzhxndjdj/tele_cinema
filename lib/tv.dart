@@ -10,11 +10,13 @@ import 'lang.dart';
 import 'extra.dart';
 import 'features.dart';
 import 'features2.dart';
+
 /* ======== أدوات مساعدة ======== */
 String _fmt(Duration d) {
 final h = d.inHours, m = d.inMinutes % 60, s = d.inSeconds % 60;
 return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}' : '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
+
 int _durSec(String s) {
 final p = s.split(':');
 try {
@@ -23,15 +25,18 @@ if (p.length == 2) return int.parse(p[0]) * 60 + int.parse(p[1]);
 } catch (_) {}
 return 0;
 }
+
 bool _isFinished(Movie m) {
 final pos = Store.getPosition(m.id);
 final tot = _durSec(m.duration);
 return pos > 0 && tot > 0 && pos >= (tot * 0.95).toInt();
 }
+
 bool _inProgress(Movie m) {
 final pos = Store.getPosition(m.id);
 return pos > 60 && !_isFinished(m);
 }
+
 /* ✅ حوار إنشاء قائمة جديدة */
 void _newListDialog(BuildContext context) {
 final ctrl = TextEditingController();
@@ -57,12 +62,14 @@ child: const Text('إنشاء')),
 ],
 ));
 }
+
 /* ======== الشاشة الرئيسية للتلفزيون ======== */
 class TvHome extends StatefulWidget {
 const TvHome({super.key});
 @override
 State<TvHome> createState() => _TvHomeState();
 }
+
 class _TvHomeState extends State<TvHome> {
 bool _busy = false;
 String _tab = 'all';
@@ -71,17 +78,20 @@ bool _searching = false;
 String _query = '';
 List<Movie> _popular = [];
 final _searchCtrl = TextEditingController();
+
 @override
 void initState() {
 super.initState();
 if (Store.channels().isNotEmpty && Store.all().isEmpty) _refresh();
 _loadPopular();
 }
+
 @override
 void dispose() {
 _searchCtrl.dispose();
 super.dispose();
 }
+
 Future _refresh() async {
 if (_busy) return;
 setState(() => _busy = true);
@@ -95,6 +105,7 @@ await Store.saveMovies(c.username, [...p.movies, ...old.where((e) => !ids.contai
 }
 if (mounted) setState(() => _busy = false);
 }
+
 /* ✅ الأكثر مشاهدة */
 Future _loadPopular() async {
 try {
@@ -126,6 +137,7 @@ if (out.isEmpty) out.addAll(Store.history().take(10));
 if (mounted) setState(() => _popular = out);
 } catch (_) {}
 }
+
 void _addDialog() {
 final ctrl = TextEditingController();
 bool busy = false;
@@ -162,6 +174,7 @@ child: Text(Lang.t('addChannel'))),
 ],
 )));
 }
+
 /* ✅ فيلم عشوائي */
 void _random() {
 final all = Store.all();
@@ -169,6 +182,7 @@ if (all.isEmpty) return;
 final m = all[DateTime.now().millisecondsSinceEpoch % all.length];
 Navigator.push(context, MaterialPageRoute(builder: (_) => TvDetails(m: m)));
 }
+
 void _sortDialog() {
 final options = [
 ['default', 'الأحدث أولاً'],
@@ -203,6 +217,7 @@ setState(() {});
 ),
 ));
 }
+
 List<Movie> _baseList() {
 switch (_tab) {
 case 'cont': return Store.all().where(_inProgress).toList();
@@ -212,11 +227,13 @@ case 'all': return groupMoviesSmart(Store.all());
 default: return groupMoviesSmart(Store.moviesOf(_tab));
 }
 }
+
 List<Movie> _displayList() {
 var l = _baseList();
 if (_query.trim().isNotEmpty) l = Search.run(l, _query);
 return Sorter.apply(l, Store.sortMode);
 }
+
 Widget _tabChip(String id, String label, {Widget? icon}) {
 final on = _tab == id;
 return Padding(
@@ -236,6 +253,7 @@ Text(label, style: TextStyle(color: on ? Colors.black : Colors.white, fontSize: 
 ),
 );
 }
+
 /* ✅ بانر اختيار اليوم */
 Widget _banner(Movie m) => Padding(
 padding: const EdgeInsets.fromLTRB(24, 10, 24, 6),
@@ -256,16 +274,19 @@ const Icon(Icons.chevron_left, color: Colors.white70),
 ),
 ),
 );
+
 Widget _row(String title, List<Movie> list) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 Padding(padding: const EdgeInsets.fromLTRB(24, 14, 24, 6), child: Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.accent))),
 SizedBox(height: 250, child: ListView.builder(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 24), itemCount: list.length, itemBuilder: (_, i) => TvCard(m: list[i]))),
 ]);
+
 Widget _grid(List<Movie> list) => GridView.builder(
 padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: (MediaQuery.of(context).size.width / 190).floor().clamp(2, 8), childAspectRatio: 0.62, crossAxisSpacing: 12, mainAxisSpacing: 12),
 itemCount: list.length,
 itemBuilder: (_, i) => TvCard(m: list[i]),
 );
+
 Widget _gridFlow(List<Movie> list) => GridView.builder(
 shrinkWrap: true,
 physics: const NeverScrollableScrollPhysics(),
@@ -274,7 +295,8 @@ gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: (MediaQu
 itemCount: list.length,
 itemBuilder: (_, i) => TvCard(m: list[i]),
 );
-/* ✅ التحميلات المكتملة*/
+
+/* ✅ التحميلات المكتملة */
 Widget _downloads() {
 final entries = Store.downloads().entries.toList();
 if (entries.isEmpty) {
@@ -310,6 +332,7 @@ setState(() {});
 );
 });
 }
+
 /* ✅ القوائم المخصصة */
 Widget _listsView() {
 if (_openList != null) {
@@ -346,6 +369,7 @@ onTap: () => setState(() => _openList = name),
 )),
 ]);
 }
+
 @override
 Widget build(BuildContext context) => ValueListenableBuilder<int>(
 valueListenable: Store.tick,
@@ -415,6 +439,7 @@ _gridFlow(list),
 ]));
 });
 }
+
 /* ======== بطاقة فيلم ======== */
 class TvCard extends StatefulWidget {
 final Movie m;
@@ -422,24 +447,29 @@ const TvCard({super.key, required this.m});
 @override
 State<TvCard> createState() => _TvCardState();
 }
+
 class _TvCardState extends State<TvCard> {
 final _f = FocusNode();
 bool _on = false;
+
 @override
 void initState() {
 super.initState();
 _f.addListener(() => setState(() => _on = _f.hasFocus));
 }
+
 @override
 void dispose() {
 _f.dispose();
 super.dispose();
 }
+
 /* ✅ هل هذا فيلم جزء من سلسلة؟ */
 bool _isSeries(Movie m) {
 final raw = m.rawJson;
 return raw != null && raw['is_series'] == true;
 }
+
 @override
 Widget build(BuildContext context) {
 final m = widget.m;
@@ -457,13 +487,14 @@ Positioned(left: 8, right: 8, bottom: 8, child: Text(m.title, maxLines: 2, overf
 if (m.quality.isNotEmpty) Positioned(top: 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text(m.quality, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)))),
 /* ✅ شارة سلسلة */
 if (_isSeries(m)) Positioned(top: m.quality.isNotEmpty ? 30 : 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.movie_filter, size: 11, color: Colors.white), SizedBox(width: 3), Text('سلسلة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))]))),
-  if (SeriesRegistry.isSeries(m.id)) Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
+if (SeriesRegistry.isSeries(m.id)) Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
 if (Store.isFav(m.id)) Positioned(top: 6, left: 6, child: Icon(Icons.favorite, size: 16, color: Colors.red)),
 /* ✅ شريط التقدم باتجاه LTR */
 if (pos > 0 && tot > 0) Positioned(left: 0, right: 0, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: pos / tot, minHeight: 4, backgroundColor: Colors.black54, valueColor: AlwaysStoppedAnimation(AppTheme.accent)))),
 ]))))));
 }
 }
+
 /* ======== شاشة تفاصيل الفيلم ======== */
 class TvDetails extends StatefulWidget {
 final Movie m;
@@ -471,6 +502,7 @@ const TvDetails({super.key, required this.m});
 @override
 State<TvDetails> createState() => _TvDetailsState();
 }
+
 class _TvDetailsState extends State<TvDetails> {
 Future _openExternal() async {
 try {
@@ -480,6 +512,7 @@ await ch.invokeMethod('openExternal', {'url': widget.m.videoUrl});
 if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('التشغيل الخارجي غير مدعوم على هذا الجهاز')));
 }
 }
+
 Future _download() async {
 final ok = await Downloader.start(widget.m);
 if (mounted) {
@@ -487,6 +520,7 @@ ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ok ? 'بدأ �
 setState(() {});
 }
 }
+
 /* ✅ إضافة إلى القوائم المخصصة */
 void _listsDialog(Movie m) {
 showDialog(
@@ -523,6 +557,7 @@ _newListDialog(context);
 actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('تم'))],
 )));
 }
+
 @override
 Widget build(BuildContext context) {
 final m = widget.m;
@@ -563,6 +598,13 @@ OutlinedButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new
 ]),
 ])),
 ]),
+/* ✅ أجزاء السلسلة (تظهر لأي فيلم من السلسلة) */
+if (SeriesRegistry.isSeries(m.id)) ...[
+const SizedBox(height: 28),
+Text('أجزاء السلسلة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.accent)),
+const SizedBox(height: 12),
+Wrap(spacing: 12, runSpacing: 12, children: SeriesRegistry.partsOf(m.id).asMap().entries.map((e) => ActionChip(label: Text('الجزء ${e.key + 1}', style: const TextStyle(color: Colors.white)), backgroundColor: const Color(0xFF1B2430), side: BorderSide(color: e.value.id == m.id ? AppTheme.accent : Colors.white24), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => TvDetails(m: e.value))))).toList()),
+],
 if (m.alts.isNotEmpty) ...[
 const SizedBox(height: 28),
 Text('الجودات المتاحة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.accent)),
@@ -576,12 +618,14 @@ ActionChip(label: Text('${m.quality.isNotEmpty ? m.quality : 'افتراضي'} (
 Positioned(top: 12, right: 12, child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28), onPressed: () => Navigator.pop(context))),
 ]));
 }
+
 Widget _chip(String t, {bool outline = false}) => Container(
 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
 decoration: BoxDecoration(color: outline ? Colors.transparent : AppTheme.accent.withOpacity(0.15), border: Border.all(color: outline ? Colors.white24 : AppTheme.accent.withOpacity(0.5)), borderRadius: BorderRadius.circular(14)),
 child: Text(t, style: TextStyle(fontSize: 12, color: outline ? Colors.white70 : AppTheme.accent, fontWeight: FontWeight.bold)),
 );
 }
+
 /* ======== مشغل الفيديو ======== */
 class TvPlayer extends StatefulWidget {
 final Movie movie;
@@ -592,12 +636,14 @@ const TvPlayer({super.key, required this.movie, this.localPath, this.startUrl, t
 @override
 State<TvPlayer> createState() => _TvPlayerState();
 }
+
 class _TvPlayerState extends State<TvPlayer> {
 VideoPlayerController? _c;
 bool _ready = false, _err = false, _ui = true;
 Timer? _hide, _saver;
 String _currentQuality = '';
 String _currentUrl = '';
+
 @override
 void initState() {
 super.initState();
@@ -609,6 +655,7 @@ _saver = Timer.periodic(const Duration(seconds: 5), (_) => _save());
 _init();
 _poke();
 }
+
 Future _save() async {
 final c = _c;
 if (c != null && c.value.isInitialized) {
@@ -616,6 +663,7 @@ final pos = c.value.position.inSeconds, dur = c.value.duration.inSeconds;
 if (pos > 10 && pos < dur - 10) await Store.savePosition(widget.movie.id, pos);
 }
 }
+
 Future _init({String? url}) async {
 try {
 final c = widget.localPath != null
@@ -640,12 +688,14 @@ c.play();
 if (mounted) setState(() => _err = true);
 }
 }
+
 void _poke() {
 _hide?.cancel();
 _hide = Timer(const Duration(seconds: 4), () {
 if (mounted) setState(() => _ui = false);
 });
 }
+
 void _seek(int s) {
 final c = _c;
 if (c == null || !c.value.isInitialized) return;
@@ -653,12 +703,14 @@ final t = c.value.duration.inSeconds;
 c.seekTo(Duration(seconds: (c.value.position.inSeconds + s).clamp(0, t)));
 _poke();
 }
+
 void _vol(double d) {
 final c = _c;
 if (c == null) return;
 c.setVolume((c.value.volume + d).clamp(0.0, 1.0));
 _poke();
 }
+
 KeyEventResult _onKey(FocusNode n, RawKeyEvent e) {
 if (e is! RawKeyDownEvent) return KeyEventResult.handled;
 final k = e.logicalKey;
@@ -681,6 +733,7 @@ return KeyEventResult.handled;
 }
 return KeyEventResult.ignored;
 }
+
 void _showQualitySelector() {
 showModalBottomSheet(
 context: context,
@@ -712,6 +765,7 @@ const SizedBox(height: 8),
 ]),
 ));
 }
+
 Future<void> _switchQuality(String newUrl, String newQuality) async {
 if (newUrl == _currentUrl) return;
 final oldPos = _c?.value.position ?? Duration.zero;
@@ -729,6 +783,7 @@ final c = _c;
 if (c != null && c.value.isInitialized && oldPos.inSeconds > 0) await c.seekTo(oldPos);
 _poke();
 }
+
 @override
 void dispose() {
 _save();
@@ -738,6 +793,7 @@ WakelockPlus.disable();
 _c?.dispose();
 super.dispose();
 }
+
 @override
 Widget build(BuildContext context) {
 final c = _c;
@@ -791,12 +847,14 @@ style: const TextStyle(fontSize: 12, color: Colors.white54)),
 ])));
 }
 }
+
 /* ======== شاشة إدارة القنوات ======== */
 class ManageChannelsScreen extends StatefulWidget {
 const ManageChannelsScreen({super.key});
 @override
 State<ManageChannelsScreen> createState() => _ManageChannelsScreenState();
 }
+
 class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
 Future<void> _deleteChannel(Channel c) async {
 final confirm = await showDialog<bool>(
@@ -805,8 +863,7 @@ builder: (ctx) => AlertDialog(
 backgroundColor: const Color(0xFF151B23),
 title: const Text('حذف القناة', style: TextStyle(color: Colors.white)),
 content: Text(
-'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟
-سيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).',
+'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).',
 style: const TextStyle(color: Colors.white70),
 ),
 actions: [
@@ -829,6 +886,7 @@ setState(() {});
 }
 }
 }
+
 Future<void> _refreshChannel(Channel c) async {
 try {
 final p = await Tg.fetchPage(c.username);
@@ -851,6 +909,7 @@ backgroundColor: Colors.red,
 }
 }
 }
+
 void _addChannel() {
 final ctrl = TextEditingController();
 bool busy = false;
@@ -890,6 +949,7 @@ child: Text(Lang.t('addChannel'))),
 ],
 )));
 }
+
 @override
 Widget build(BuildContext context) => ValueListenableBuilder<int>(
 valueListenable: Store.tick,
@@ -912,7 +972,7 @@ tooltip: 'إضافة قناة جديدة',
 onPressed: _addChannel,
 ),
 IconButton(icon: const Icon(Icons.upload_file, color: Colors.white70, size: 26), tooltip: 'تصدير', onPressed: () async { final r = await Backup.exportAll(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }),
-IconButton(icon: const Icon(Icons.download_file, color: Colors.white70, size: 26), tooltip: 'استيراد', onPressed: () async { final r = await Backup.importAll(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }),
+IconButton(icon: const Icon(Icons.file_download, color: Colors.white70, size: 26), tooltip: 'استيراد', onPressed: () async { final r = await Backup.importAll(); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }),
 ],
 ),
 body: chs.isEmpty
@@ -1010,6 +1070,7 @@ onPressed: () => _deleteChannel(c),
 );
 });
 }
+
 /* ======== ✅ شاشة عرض أجزاء السلسلة ======== */
 class TvSeriesScreen extends StatefulWidget {
 final Movie movie;
@@ -1017,6 +1078,7 @@ const TvSeriesScreen({super.key, required this.movie});
 @override
 State<TvSeriesScreen> createState() => _TvSeriesScreenState();
 }
+
 class _TvSeriesScreenState extends State<TvSeriesScreen> {
 @override
 Widget build(BuildContext context) {
@@ -1164,11 +1226,12 @@ Icon(Icons.play_circle_fill, color: AppTheme.accent, size: 36),
 }
 
 /* ============================================================
-   ✅ شاشة أجزاء السلسلة للتلفزيون (تُلصق في نهاية tv.dart)
-   ============================================================ */
+✅ شاشة أجزاء السلسلة للتلفزيون
+============================================================ */
 class TvSeriesPartsScreen extends StatelessWidget {
 final Movie m;
 const TvSeriesPartsScreen({super.key, required this.m});
+
 @override
 Widget build(BuildContext context) {
 final parts = SeriesRegistry.partsOf(m.id);
