@@ -33,8 +33,8 @@ jobs:
           if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
           if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
           if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
+          ls -la android/app/ | head -20
 
-      # ✅✅✅ تحقق من الملفات قبل أي تعديل ✅✅✅
       - name: Verify files exist
         run: |
           echo "=== الملفات الموجودة في lib ==="
@@ -63,7 +63,7 @@ jobs:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
-                  new = old[:-1] + '\n    id "com.google.gms.google-services" version "4.4.0" apply false\n}'
+                  new = old[:-1] + chr(10) + '    id "com.google.gms.google-services" version "4.4.0" apply false' + chr(10) + '}'
                   s = s.replace(old, new)
                   open(p, 'w').write(s)
                   print('settings.gradle patched')
@@ -72,39 +72,32 @@ jobs:
           p = 'android/app/build.gradle'
           s = open(p).read()
 
-          # إضافة google-services
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
-                  new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
+                  new = old[:-1] + chr(10) + '    id "com.google.gms.google-services"' + chr(10) + '}'
                   s = s.replace(old, new)
 
-          # إضافة signingConfigs
-          sig = """    signingConfigs {
-              release {
-                  storeFile file('telecinema.keystore')
-                  storePassword '12345678'
-                  keyAlias 'telecinema'
-                  keyPassword '12345678'
-              }
-          }
-          """
+          sig = '    signingConfigs {' + chr(10)
+          sig += '        release {' + chr(10)
+          sig += "            storeFile file('telecinema.keystore')" + chr(10)
+          sig += "            storePassword '12345678'" + chr(10)
+          sig += "            keyAlias 'telecinema'" + chr(10)
+          sig += "            keyPassword '12345678'" + chr(10)
+          sig += '        }' + chr(10)
+          sig += '    }' + chr(10)
+
           if 'signingConfigs' not in s:
-              s = s.replace('    buildTypes {', sig + '\n    buildTypes {', 1)
+              s = s.replace('    buildTypes {', sig + chr(10) + '    buildTypes {', 1)
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
 
-          # ✅✅✅ تعديل compileSdk إلى 35 (بسيط ومضمون) ✅✅✅
-          # جرب جميع الأنماط الممكنة
           s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
           s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
           s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
-
-          # إذا ما كانت موجودة أبداً، أضفها
           if 'compileSdk' not in s:
-              s = re.sub(r'android\s*\{', 'android {\n    compileSdk = 35', s, count=1)
+              s = re.sub(r'android\s*\{', 'android {' + chr(10) + '    compileSdk = 35', s, count=1)
 
-          # أيضاً targetSdk و minSdk
           s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
           s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
           s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
@@ -113,7 +106,6 @@ jobs:
           print('✅ gradle patched (google-services + signing + compileSdk 35)')
           PYEOF
 
-          # عرض الأسطر المعدلة للتأكد
           echo "=== سطور compileSdk في build.gradle ==="
           grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
 
@@ -175,147 +167,123 @@ jobs:
           flutter pub get
           flutter pub run flutter_launcher_icons:main
 
-      # ✅✅✅ خطوة جديدة: إصلاح الأسطر المكسورة (\n) في ملفات Dart ✅✅✅
-      - name: Fix broken string literals in Dart files
+      # ✅✅✅ إصلاح شامل للأسطر المكسورة في ملفات Dart ✅✅✅
+      # هذا السكربت يستخدم chr() لتجنب كسر الرموز عند النقل
+      - name: Fix all broken Dart files
         run: |
           python3 << 'PYEOF'
           import os
           import re
 
-          files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
-
-          for filepath in files:
-              if not os.path.exists(filepath):
-                  print(f'⚠️ {filepath} غير موجود - تخطي')
-                  continue
-
-              with open(filepath, 'r', encoding='utf-8') as f:
-                  lines = f.readlines()
-
-              fixed_lines = []
-              i = 0
-              fixes = 0
-
-              while i < len(lines):
-                  line = lines[i]
-                  stripped = line.rstrip('\n').rstrip('\r')
-
-                  # عدد علامات التنصيص الفردية (غير escaped)
-                  single_quotes = len(re.findall(r"(?<!\\)'", stripped))
-                  double_quotes = len(re.findall(r'(?<!\\)"', stripped))
-
-                  # إذا كان السطر يحتوي على عدد فردي من علامات تنصيص، قد يكون مكسور
-                  is_broken = (single_quotes % 2 == 1) or (double_quotes % 2 == 1)
-
-                  if is_broken and i + 1 < len(lines):
-                      # تحقق أن السطر التالي يبدو مكملاً (ليس class/def/void/etc)
-                      next_line = lines[i + 1]
-                      next_stripped = next_line.lstrip()
-
-                      # إذا السطر التالي يبدأ بكلمة محجوزة، لا تدمج
-                      reserved_start = ('class ', 'def ', 'void ', 'static ', 'final ', 'var ',
-                                        'return ', 'if ', 'for ', 'while ', 'import ', 'export ',
-                                        '@override', '//', '/*', '*')
-                      is_continuation = not any(next_stripped.startswith(r) for r in reserved_start)
-
-                      if is_continuation and len(next_stripped) < 200:
-                          merged = stripped + '\n' + next_stripped
-                          fixed_lines.append(merged)
-                          fixes += 1
-                          i += 2
-                          continue
-
-                  fixed_lines.append(line)
-                  i += 1
-
-              if fixes > 0:
-                  with open(filepath, 'w', encoding='utf-8') as f:
-                      f.writelines(fixed_lines)
-                  print(f'✅ Fixed {fixes} broken strings in {filepath}')
-              else:
-                  print(f'✓ No broken strings in {filepath}')
-
-          # ✅ إصلاح خاص لـ rawJson cast في core.dart
-          core_path = 'lib/core.dart'
-          if os.path.exists(core_path):
-              with open(core_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-
-              modified = False
-
-              if 'rawJson: item));' in content:
-                  content = content.replace(
-                      'rawJson: item));',
-                      'rawJson: Map<String, dynamic>.from(item)));'
-                  )
-                  modified = True
-                  print('✅ Fixed rawJson cast (item)')
-
-              if 'rawJson: item)' in content and 'rawJson: Map' not in content:
-                  content = content.replace(
-                      'rawJson: item)',
-                      'rawJson: Map<String, dynamic>.from(item))'
-                  )
-                  modified = True
-                  print('✅ Fixed rawJson cast (item - variant 2)')
-
-              if modified:
-                  with open(core_path, 'w', encoding='utf-8') as f:
-                      f.write(content)
-
-          print('✅ String literal fix complete')
-          PYEOF
-
-          echo "=== التحقق من الإصلاحات ==="
-          echo "ملفات تحتوي على \\n الصحيح:"
-          grep -l "split('\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد split('\\n')"
-          grep -l "join('\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد join('\\n')"
-
-      # 🔥🔥🔥 إضافة جديدة: إصلاح محدد للأنماط المكسورة المتبقية 🔥🔥🔥
-      - name: Fix specific broken newline patterns
-        run: |
-          python3 << 'PYEOF'
-          import os
-          import re
+          BS = chr(92)      # backslash character: \
+          NL = chr(10)      # actual newline character
+          BSN = BS + 'n'    # literal two-char sequence: \n
 
           files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
 
           for filepath in files:
               if not os.path.exists(filepath):
+                  print(f'SKIP {filepath} (not found)')
                   continue
 
               with open(filepath, 'r', encoding='utf-8') as f:
                   content = f.read()
 
               original = content
-              fixes = 0
+              changes = []
 
-              # إصلاح: split(' + سطر جديد + ')  =>  split('\n')
-              content, n = re.subn(r"split\('\s*\n\s*'\)", "split('\\n')", content)
-              fixes += n
+              # ===== الخطوة 1: حماية \n الصحيح داخل split/join =====
+              content = content.replace("split('" + BSN + "')", "___PROT_SPLIT___")
+              content = content.replace("join('" + BSN + "')", "___PROT_JOIN___")
+              content = content.replace('split("' + BSN + '")', "___PROT_SPLIT2___")
+              content = content.replace('join("' + BSN + '")', "___PROT_JOIN2___")
+              changes.append('protected split/join')
 
-              # إصلاح: join(' + سطر جديد + ')  =>  join('\n')
-              content, n = re.subn(r"join\('\s*\n\s*'\)", "join('\\n')", content)
-              fixes += n
+              # ===== الخطوة 2: تحويل كل \n حرفي إلى سطر جديد فعلي =====
+              if BSN in content:
+                  count = content.count(BSN)
+                  content = content.replace(BSN, NL)
+                  changes.append(f'converted {count} literal BSN to real newlines')
 
-              # إصلاح: أي نص متعدد الأسطر داخل single quotes
-              # مثل: 'هل أنت متأكد...\nسيتم حذف...'
-              content, n = re.subn(r"'([^']*)\n([^']*)'", r"'\1\\n\2'", content)
-              fixes += n
+              # ===== الخطوة 3: إعادة split/join المحمية =====
+              content = content.replace("___PROT_SPLIT___", "split('" + BSN + "')")
+              content = content.replace("___PROT_JOIN___", "join('" + BSN + "')")
+              content = content.replace("___PROT_SPLIT2___", 'split("' + BSN + '")')
+              content = content.replace("___PROT_JOIN2___", 'join("' + BSN + '")')
+
+              # ===== الخطوة 4: إصلاح split(' + سطر جديد + ') =====
+              content = re.sub(r"split\(\s*'\s*\n\s*'\s*\)", "split('" + BSN + "')", content)
+              content = re.sub(r"join\(\s*'\s*\n\s*'\s*\)", "join('" + BSN + "')", content)
+              changes.append('fixed split/join with real newlines')
+
+              # ===== الخطوة 5: إصلاح النصوص العربية متعددة الأسطر =====
+              lines = content.split(NL)
+              fixed = []
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  stripped = line.rstrip()
+                  sq = len(re.findall(r"(?<!\\)'", stripped))
+                  dq = len(re.findall(r'(?<!\\)"', stripped))
+                  is_broken = (sq % 2 == 1) or (dq % 2 == 1)
+
+                  if is_broken and i + 1 < len(lines):
+                      nxt = lines[i + 1]
+                      nxt_s = nxt.lstrip()
+                      reserved = ('class ', 'void ', 'static ', 'final ', 'var ',
+                                  'return ', 'if ', 'for ', 'while ', 'import ',
+                                  'export ', '@override', '//', '/*', '*/', '}',
+                                  ')', ']', 'Widget ', 'Future', 'List', 'Map',
+                                  'String ', 'bool ', 'int ', 'double ')
+                      is_code = any(nxt_s.startswith(r) for r in reserved)
+                      if not is_code and len(nxt_s) < 300 and nxt_s:
+                          merged = stripped + BSN + nxt_s
+                          fixed.append(merged)
+                          changes.append('merged multiline string')
+                          i += 2
+                          continue
+
+                  fixed.append(lines[i])
+                  i += 1
+
+              content = NL.join(fixed)
+
+              # ===== الخطوة 6: إصلاح rawJson cast =====
+              if 'rawJson: item));' in content:
+                  content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
+                  changes.append('fixed rawJson cast v1')
+              if 'rawJson: item)' in content and 'rawJson: Map' not in content:
+                  content = content.replace('rawJson: item)', 'rawJson: Map<String, dynamic>.from(item))')
+                  changes.append('fixed rawJson cast v2')
+
+              # ===== الخطوة 7: تنظيف الأسطر الفارغة الزائدة =====
+              content = re.sub(NL + '{4,}', NL + NL + NL, content)
+
+              # ===== الخطوة 8: التأكد من عدم وجود \n حرفي خارج النصوص =====
+              # نبحث عن ;\n أو {\n أو }\n خارج النصوص
+              # هذه خطوة إضافية للأمان
+              remaining = content.count(BSN)
+              if remaining > 0:
+                  # نتحقق إذا كانت داخل نصوص فقط
+                  print(f'  INFO: {remaining} BSN remaining (should be inside strings)')
 
               if content != original:
                   with open(filepath, 'w', encoding='utf-8') as f:
                       f.write(content)
-                  print(f'✅ Fixed {fixes} specific patterns in {filepath}')
+                  print(f'FIXED {filepath}: {", ".join(changes[:5])}')
               else:
-                  print(f'✓ No specific patterns to fix in {filepath}')
+                  print(f'OK {filepath}: no changes needed')
 
-          print('✅ Specific pattern fix complete')
+          print('ALL DART FILES PROCESSED')
           PYEOF
 
+          echo ""
           echo "=== التحقق النهائي ==="
-          echo "الأسطر التي تحتوي على split أو join:"
-          grep -n "split\|join" lib/core.dart | grep -v "//" | head -20
+          echo "عدد الأسطر في كل ملف:"
+          wc -l lib/core.dart lib/tv.dart lib/ui.dart
+          echo ""
+          echo "أسطر split/join:"
+          grep -n "split\|join" lib/core.dart | grep -v "//" | head -15
           echo ""
           grep -n "split\|join" lib/tv.dart | grep -v "//" | head -10
           echo ""
