@@ -71,7 +71,7 @@ jobs:
           # 2) app/build.gradle
           p = 'android/app/build.gradle'
           s = open(p).read()
-          
+
           # إضافة google-services
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
@@ -79,7 +79,7 @@ jobs:
                   old = m.group(0)
                   new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
                   s = s.replace(old, new)
-          
+
           # إضافة signingConfigs
           sig = """    signingConfigs {
               release {
@@ -93,26 +93,26 @@ jobs:
           if 'signingConfigs' not in s:
               s = s.replace('    buildTypes {', sig + '\n    buildTypes {', 1)
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-          
+
           # ✅✅✅ تعديل compileSdk إلى 35 (بسيط ومضمون) ✅✅✅
           # جرب جميع الأنماط الممكنة
           s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
           s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
           s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
-          
+
           # إذا ما كانت موجودة أبداً، أضفها
           if 'compileSdk' not in s:
               s = re.sub(r'android\s*\{', 'android {\n    compileSdk = 35', s, count=1)
-          
+
           # أيضاً targetSdk و minSdk
           s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
           s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
           s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
-          
+
           open(p, 'w').write(s)
           print('✅ gradle patched (google-services + signing + compileSdk 35)')
           PYEOF
-          
+
           # عرض الأسطر المعدلة للتأكد
           echo "=== سطور compileSdk في build.gradle ==="
           grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
@@ -214,12 +214,12 @@ jobs:
 
                       # إذا السطر التالي يبدأ بكلمة محجوزة، لا تدمج
                       reserved_start = ('class ', 'def ', 'void ', 'static ', 'final ', 'var ',
-                                       'return ', 'if ', 'for ', 'while ', 'import ', 'export ',
-                                       '@override', '//', '/*', '*')
+                                        'return ', 'if ', 'for ', 'while ', 'import ', 'export ',
+                                        '@override', '//', '/*', '*')
                       is_continuation = not any(next_stripped.startswith(r) for r in reserved_start)
 
                       if is_continuation and len(next_stripped) < 200:
-                          merged = stripped + '\\n' + next_stripped
+                          merged = stripped + '\n' + next_stripped
                           fixed_lines.append(merged)
                           fixes += 1
                           i += 2
@@ -242,6 +242,7 @@ jobs:
                   content = f.read()
 
               modified = False
+
               if 'rawJson: item));' in content:
                   content = content.replace(
                       'rawJson: item));',
@@ -267,8 +268,58 @@ jobs:
 
           echo "=== التحقق من الإصلاحات ==="
           echo "ملفات تحتوي على \\n الصحيح:"
-          grep -l "split('\\\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد split('\\n')"
-          grep -l "join('\\\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد join('\\n')"
+          grep -l "split('\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد split('\\n')"
+          grep -l "join('\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد join('\\n')"
+
+      # 🔥🔥🔥 إضافة جديدة: إصلاح محدد للأنماط المكسورة المتبقية 🔥🔥🔥
+      - name: Fix specific broken newline patterns
+        run: |
+          python3 << 'PYEOF'
+          import os
+          import re
+
+          files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
+
+          for filepath in files:
+              if not os.path.exists(filepath):
+                  continue
+
+              with open(filepath, 'r', encoding='utf-8') as f:
+                  content = f.read()
+
+              original = content
+              fixes = 0
+
+              # إصلاح: split(' + سطر جديد + ')  =>  split('\n')
+              content, n = re.subn(r"split\('\s*\n\s*'\)", "split('\\n')", content)
+              fixes += n
+
+              # إصلاح: join(' + سطر جديد + ')  =>  join('\n')
+              content, n = re.subn(r"join\('\s*\n\s*'\)", "join('\\n')", content)
+              fixes += n
+
+              # إصلاح: أي نص متعدد الأسطر داخل single quotes
+              # مثل: 'هل أنت متأكد...\nسيتم حذف...'
+              content, n = re.subn(r"'([^']*)\n([^']*)'", r"'\1\\n\2'", content)
+              fixes += n
+
+              if content != original:
+                  with open(filepath, 'w', encoding='utf-8') as f:
+                      f.write(content)
+                  print(f'✅ Fixed {fixes} specific patterns in {filepath}')
+              else:
+                  print(f'✓ No specific patterns to fix in {filepath}')
+
+          print('✅ Specific pattern fix complete')
+          PYEOF
+
+          echo "=== التحقق النهائي ==="
+          echo "الأسطر التي تحتوي على split أو join:"
+          grep -n "split\|join" lib/core.dart | grep -v "//" | head -20
+          echo ""
+          grep -n "split\|join" lib/tv.dart | grep -v "//" | head -10
+          echo ""
+          grep -n "split\|join" lib/ui.dart | grep -v "//" | head -10
 
       - name: Build MOBILE APK
         run: |
