@@ -42,7 +42,7 @@ class Movie {
   List<Map<String, String>> qualities;
   late final String id, hay;
   final Map<String, dynamic>? rawJson;
-
+  
   Movie({
     required this.channel,
     required this.msgId,
@@ -63,12 +63,12 @@ class Movie {
         id = '${channel}_$msgId' {
     hay = Search.norm('$title $description ${genres.join(' ')}');
   }
-
+  
   int get year {
     final m = RegExp(r'(19|20)\d{2}').firstMatch('$title $description');
     return m == null ? 0 : int.parse(m.group(0)!);
   }
-
+  
   double get sizeMb {
     final m = RegExp(r'([\d.]+)\s*(GB|MB|TB)', caseSensitive: false).firstMatch(size);
     if (m == null) return 0;
@@ -76,7 +76,7 @@ class Movie {
     final u = m.group(2)!.toUpperCase();
     return u == 'GB' ? v * 1024 : (u == 'TB' ? v * 1024 * 1024 : v);
   }
-
+  
   List<Map<String, String>> get qualityOptions {
     final out = <Map<String, String>>[];
     void add(String q, String url, String sz) {
@@ -89,7 +89,7 @@ class Movie {
     for (final a in alts) add(a['q'] ?? '', a['url'] ?? '', '');
     return out;
   }
-
+  
   void cycleQuality() {
     final opts = qualityOptions;
     if (opts.length < 2) return;
@@ -98,14 +98,14 @@ class Movie {
     quality = n['q'] ?? quality;
     videoUrl = n['url'] ?? videoUrl;
   }
-
+  
   void applyQuality(String url) {
     final o = qualityOptions.firstWhere((e) => e['url'] == url, orElse: () => <String, String>{});
     if (o.isEmpty) return;
     quality = o['q'] ?? quality;
     videoUrl = url;
   }
-
+  
   void absorb(Movie other) {
     void add(String q, String url, String sz) {
       if (url.isEmpty || url == videoUrl) return;
@@ -116,7 +116,7 @@ class Movie {
     for (final a in other.qualities) add(a['q'] ?? '', a['url'] ?? '', a['size'] ?? '');
     for (final a in other.alts) add(a['q'] ?? '', a['url'] ?? '', '');
   }
-
+  
   Map<String, dynamic> toJson() => {
         'channel': channel,
         'msgId': msgId,
@@ -133,7 +133,7 @@ class Movie {
         'qualities': qualities,
         'raw_json': rawJson,
       };
-
+  
   static Movie fromJson(Map m) => Movie(
         channel: m['channel'] ?? '',
         msgId: m['msgId'] ?? 0,
@@ -162,7 +162,7 @@ class Search {
       .replaceAll(RegExp(r'[^0-9a-z\u0600-\u06FF\s]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
-
+  
   static List<Movie> run(List<Movie> src, String q) {
     final nq = norm(q);
     if (nq.isEmpty) return src;
@@ -184,16 +184,16 @@ class Tg {
     connectTimeout: const Duration(seconds: 15),
     headers: {'Accept': 'application/json'},
   ));
-
+  
   static String cleanUser(String input) {
     var s = input.trim().replaceAll(RegExp(r'https?://(t\.me|telegram\.me)/'), '').replaceFirst(RegExp(r'^[sS]/'), '');
     s = s.split('?').first.split('/').first;
     return s.replaceFirst('@', '');
   }
-
+  
   static String streamUrl(String user, int msgId) => '${ApiConfig.baseUrl}/stream/$user/$msgId?key=${ApiConfig.apiKey}';
   static String posterUrl(String user, int msgId) => '${ApiConfig.baseUrl}/poster/$user/$msgId?key=${ApiConfig.apiKey}';
-
+  
   static Future<Page> fetchPage(String user, {int? before}) async {
     final res = await _dio.get('${ApiConfig.baseUrl}/channel/$user', queryParameters: {
       'key': ApiConfig.apiKey,
@@ -229,7 +229,7 @@ class Tg {
     }
     return Page(movies, next, title, avatar);
   }
-
+  
   static Future<List<Movie>> fetchNew(String user, {int? afterMsgId}) async {
     try {
       final page = await fetchPage(user);
@@ -238,7 +238,7 @@ class Tg {
       return [];
     }
   }
-
+  
   static Movie _build(String ch, int mid, String caption, int date, String dur, String size,
       {List<Map<String, String>>? alts, String? serverQuality, Map<String, dynamic>? rawJson}) {
     final lines = caption.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
@@ -282,6 +282,7 @@ class BulkLoader {
   static final Set<String> _running = {};
   static final ValueNotifier<String> status = ValueNotifier('');
   static bool isRunning(String u) => _running.contains(u);
+  
   static Future<void> loadAll(String user) async {
     if (_running.contains(user)) return;
     _running.add(user);
@@ -313,13 +314,13 @@ class BulkLoader {
 class Store {
   static late Box _ch, _mv, _st;
   static final ValueNotifier<int> tick = ValueNotifier(0);
-
+  
   static Future init() async {
     _ch = await Hive.openBox('channels');
     _mv = await Hive.openBox('movies');
     _st = await Hive.openBox('state');
   }
-
+  
   static Map<String, dynamic> prefs() => Map<String, dynamic>.from(_st.get('prefs') ?? {});
   static Future setPref(String k, dynamic v) async {
     final p = prefs();
@@ -327,7 +328,7 @@ class Store {
     await _st.put('prefs', p);
     tick.value++;
   }
-
+  
   static String getString(String k, [String def = '']) => (prefs()[k] as String?) ?? def;
   static Future setString(String k, String v) => setPref(k, v);
   static String get locale => (prefs()['locale'] as String?) ?? 'ar';
@@ -335,27 +336,27 @@ class Store {
   static String get sortMode => getString('sortMode', 'default');
   static Future setSortMode(String v) => setString('sortMode', v);
   static bool getBool(String k, [bool d = false]) => (prefs()[k] as bool?) ?? d;
-
+  
   static List<Channel> channels() => _ch.values.map((e) => Channel.fromJson(Map<String, dynamic>.from(e))).toList();
   static Future addChannel(Channel c) async {
     await _ch.put(c.username, c.toJson());
     tick.value++;
   }
-
+  
   static Future delChannel(String u) async {
     await _ch.delete(u);
     await _mv.delete(u);
     tick.value++;
   }
-
+  
   static int maxId(String u) {
     final movies = moviesOf(u);
     if (movies.isEmpty) return 0;
     return movies.map((m) => m.msgId).reduce((a, b) => a > b ? a : b);
   }
-
+  
   static List<Movie> moviesOf(String u) => ((_mv.get(u) as List?) ?? []).map((e) => Movie.fromJson(Map<String, dynamic>.from(e))).toList();
-
+  
   static Future saveMovies(String u, List<Movie> l) async {
     final old = moviesOf(u);
     final ids = old.map((e) => e.msgId).toSet();
@@ -364,15 +365,15 @@ class Store {
     await _mv.put(u, merged.map((e) => e.toJson()).toList());
     tick.value++;
   }
-
+  
   static List<Movie> all() => channels().expand((c) => moviesOf(c.username)).toList()..sort((a, b) => b.date.compareTo(a.date));
   static Future clearCache() async {
     await _mv.clear();
     tick.value++;
   }
-
+  
   static String _pk(String k) => '${k}_${getString('profile', 'الرئيسي')}';
-
+  
   static List<Movie> favorites() => ((_st.get(_pk('favorites')) as List?) ?? []).map((e) => Movie.fromJson(Map<String, dynamic>.from(e))).toList();
   static bool isFav(String id) => favorites().any((e) => e.id == id);
   static Future toggleFav(Movie m) async {
@@ -385,7 +386,7 @@ class Store {
     await _st.put(_pk('favorites'), f.map((e) => e.toJson()).toList());
     tick.value++;
   }
-
+  
   static List<Movie> watchLater() => ((_st.get('watchLater') as List?) ?? []).map((e) => Movie.fromJson(Map<String, dynamic>.from(e))).toList();
   static bool isLater(String id) => watchLater().any((e) => e.id == id);
   static Future toggleLater(Movie m) async {
@@ -398,7 +399,7 @@ class Store {
     await _st.put('watchLater', f.map((e) => e.toJson()).toList());
     tick.value++;
   }
-
+  
   static Map<String, int> ratings() => Map<String, int>.from(_st.get(_pk('ratings')) ?? {});
   static Future rate(String id, int stars) async {
     final r = ratings();
@@ -410,7 +411,7 @@ class Store {
     await _st.put(_pk('ratings'), r);
     tick.value++;
   }
-
+  
   static List<Movie> history() => ((_st.get(_pk('history')) as List?) ?? []).map((e) => Movie.fromJson(Map<String, dynamic>.from(e))).toList();
   static Future markWatched(Movie m) async {
     if (getBool('incognito')) return;
@@ -421,13 +422,13 @@ class Store {
     await _st.put(_pk('history'), h.map((e) => e.toJson()).toList());
     tick.value++;
   }
-
+  
   static Future markWatchedRemove(String id) async {
     final h = history()..removeWhere((e) => e.id == id);
     await _st.put(_pk('history'), h.map((e) => e.toJson()).toList());
     tick.value++;
   }
-
+  
   static void touchStreak() {
     final today = DateTime.now().toString().substring(0, 10);
     final last = getString('lastDay', '');
@@ -439,10 +440,10 @@ class Store {
     setPref('streak', cur);
     if (cur > ((prefs()['bestStreak'] as int?) ?? 0)) setPref('bestStreak', cur);
   }
-
+  
   static int get streak => (prefs()['streak'] as int?) ?? 0;
   static int get bestStreak => (prefs()['bestStreak'] as int?) ?? 0;
-
+  
   static List<Map<String, dynamic>> commentsOf(String id) => ((_st.get('com_$id') as List?) ?? []).map((e) => Map<String, dynamic>.from(e)).toList();
   static Future addComment(String id, String text, String user) async {
     final l = commentsOf(id);
@@ -450,7 +451,7 @@ class Store {
     await _st.put('com_$id', l);
     tick.value++;
   }
-
+  
   static List<String> pinned() => List<String>.from(prefs()['pinned'] ?? []);
   static bool isPinned(String id) => pinned().contains(id);
   static Future togglePin(String id) async {
@@ -462,7 +463,7 @@ class Store {
     }
     await setPref('pinned', l);
   }
-
+  
   static List<String> vaultMovies() => List<String>.from(prefs()['vaultMovies'] ?? []);
   static List<String> vaultChannels() => List<String>.from(prefs()['vaultChannels'] ?? []);
   static Future toggleVaultMovie(String id) async {
@@ -474,7 +475,7 @@ class Store {
     }
     await setPref('vaultMovies', l);
   }
-
+  
   static Future toggleVaultChannel(String u) async {
     final l = vaultChannels();
     if (l.contains(u)) {
@@ -484,7 +485,7 @@ class Store {
     }
     await setPref('vaultChannels', l);
   }
-
+  
   static Map<String, int> positions() => Map<String, int>.from(_st.get('positions') ?? {});
   static Future savePosition(String movieId, int seconds) async {
     final p = positions();
@@ -493,9 +494,9 @@ class Store {
       await _st.put('positions', p);
     }
   }
-
+  
   static int getPosition(String movieId) => positions()[movieId] ?? 0;
-
+  
   static Map<String, dynamic> playlists() => Map<String, dynamic>.from(_st.get('playlists') ?? {});
   static Future addPlaylist(String name) async {
     final p = playlists();
@@ -503,14 +504,14 @@ class Store {
     await _st.put('playlists', p);
     tick.value++;
   }
-
+  
   static Future delPlaylist(String name) async {
     final p = playlists();
     p.remove(name);
     tick.value++;
     await _st.put('playlists', p);
   }
-
+  
   static List<Movie> playlistMovies(String name) => ((playlists()[name] as List?) ?? []).map((e) => Movie.fromJson(Map<String, dynamic>.from(e))).toList();
   static Future toggleInPlaylist(String name, Movie m) async {
     final p = playlists();
@@ -524,7 +525,7 @@ class Store {
     await _st.put('playlists', p);
     tick.value++;
   }
-
+  
   static Map<String, dynamic> stats() => Map<String, dynamic>.from(_st.get('stats') ?? {});
   static Future addWatchSeconds(int s) async {
     final st = stats();
@@ -532,13 +533,13 @@ class Store {
     st['count'] = ((st['count'] as int?) ?? 0) + 1;
     await _st.put('stats', st);
   }
-
+  
   static Future<Map<String, dynamic>> exportAll() async => {
         'channels': _ch.toMap(),
         'movies': _mv.toMap(),
         'state': _st.toMap(),
       };
-
+  
   static Future importAll(Map<String, dynamic> data) async {
     if (data['channels'] is Map) {
       await _ch.clear();
@@ -554,7 +555,7 @@ class Store {
     }
     tick.value++;
   }
-
+  
   static Map<String, dynamic> downloads() => Map<String, dynamic>.from(_st.get('downloads') ?? {});
   static Future addDownload(Movie m, String path) async {
     final d = downloads();
@@ -562,7 +563,7 @@ class Store {
     await _st.put('downloads', d);
     tick.value++;
   }
-
+  
   static Future delDownload(String id) async {
     final d = downloads();
     d.remove(id);
@@ -576,12 +577,12 @@ class Sync {
   static Timer? _timer;
   static final ValueNotifier<String> status = ValueNotifier('');
   static void Function(int count, String channel)? onNewMovies;
-
+  
   static void start() {
     _timer ??= Timer.periodic(const Duration(hours: 2), (_) => checkAll());
     Future.delayed(const Duration(seconds: 3), checkAll);
   }
-
+  
   static Future checkAll() async {
     if (_busy) return;
     _busy = true;
@@ -613,24 +614,24 @@ class Downloader {
   static final ValueNotifier<Map<String, double>> progress = ValueNotifier({});
   static final ValueNotifier<int> tick = ValueNotifier(0);
   static final ValueNotifier<bool> wifiBlocked = ValueNotifier(false);
-
+  
   static bool isActive(String id) => _tokens.containsKey(id);
   static bool isPaused(String id) => _paused[id] == true && !_tokens.containsKey(id);
   static Movie? movieOf(String id) => _movies[id];
   static List<String> activeIds() => _movies.keys.toList();
-
+  
   static Future<String> _dir() async {
     final base = await getExternalStorageDirectory();
     final dir = Directory('${base!.path}/Movies');
     if (!await dir.exists()) await dir.create();
     return dir.path;
   }
-
+  
   static Future deleteFile(String path) async {
     final f = File(path);
     if (await f.exists()) await f.delete();
   }
-
+  
   static Future<bool> start(Movie m) async {
     final id = m.id;
     if (isActive(id)) return false;
@@ -654,7 +655,7 @@ class Downloader {
     await _run(m, 0);
     return true;
   }
-
+  
   static Future _run(Movie m, int offset) async {
     final id = m.id;
     final token = CancelToken();
@@ -708,14 +709,14 @@ class Downloader {
       }
     }
   }
-
+  
   static void pause(String id) {
     if (!isActive(id)) return;
     _paused[id] = true;
     _tokens.remove(id)?.cancel();
     tick.value++;
   }
-
+  
   static Future resume(String id) async {
     final m = _movies[id];
     if (m == null || isActive(id)) return;
@@ -724,7 +725,7 @@ class Downloader {
     tick.value++;
     await _run(m, _received[id] ?? 0);
   }
-
+  
   static void cancel(String id) {
     _cancelled[id] = true;
     _paused[id] = false;
@@ -732,7 +733,7 @@ class Downloader {
     if (!isActive(id)) _removeAll(id);
     tick.value++;
   }
-
+  
   static void _removeAll(String id) {
     _tokens.remove(id);
     _paused.remove(id);
@@ -747,7 +748,7 @@ class Downloader {
 class Tmdb {
   static const String apiKey = '9ba4e29354937364c2202857afcd7f94';
   static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
-
+  
   static String _cleanQuery(String title) {
     var t = title.trim().split('\n').first.trim();
     t = t.replaceAll(RegExp(r'[\[\【】{}《》«»]'), ' ');
@@ -758,15 +759,15 @@ class Tmdb {
     t = t.replaceAll(RegExp(r'[\s_\-|:]+'), ' ').trim();
     return t;
   }
-
+  
   static String? _extractEnglish(String s) {
     final m = RegExp(r"([A-Z][a-zA-Z0-9'\-]*(?:\s+[A-Z][a-zA-Z0-9'\-]*)+)").firstMatch(s);
     final t = m?.group(1)?.trim();
     return (t != null && t.length >= 3) ? t : null;
   }
-
+  
   static String _englishOnly(String s) => s.replaceAll(RegExp(r'[^\x00-\x7F\s]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
-
+  
   static Future<Map<String, dynamic>?> search(String title, {String description = ''}) async {
     final queries = <String>[];
     void addQ(String? q) {
@@ -801,11 +802,24 @@ class Tmdb {
     }
     return null;
   }
+  
+  // 🔥 إضافة جديدة: جلب تفاصيل الفيلم للتحقق من السلاسل
+  static Future<Map<String, dynamic>?> getDetails(int movieId) async {
+    try {
+      final r = await _d.get('https://api.themoviedb.org/3/movie/$movieId', queryParameters: {
+        'api_key': apiKey,
+        'language': 'ar',
+      });
+      return r.data;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class Smart {
   static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
-
+  
   static Future<List<Map<String, dynamic>>> popular() async {
     try {
       final r = await _d.get('${ApiConfig.baseUrl}/popular', queryParameters: {'key': ApiConfig.apiKey});
@@ -814,7 +828,7 @@ class Smart {
       return [];
     }
   }
-
+  
   static String titleKey(String t) {
     var s = t.replaceAll(RegExp(r'[\[\(].*?[\]\)]'), ' ');
     s = s.replaceAll(RegExp(r'(19|20)\d{2}'), ' ');
@@ -822,7 +836,7 @@ class Smart {
     s = s.replaceAll(RegExp(r'(2160p|1080p|720p|480p|360p|4k|uhd|hdr|bluray|web-?dl|hdtv|dvdrip|brrip|fhd|hd)', caseSensitive: false), ' ');
     return Search.norm(s);
   }
-
+  
   static List<Movie> dedup(List<Movie> l) {
     final seen = <String, Movie>{};
     final out = <Movie>[];
@@ -842,7 +856,7 @@ class Smart {
     }
     return out;
   }
-
+  
   static List<Movie> recommend(List<Movie> all) {
     final taste = <String, int>{};
     for (final m in [...Store.favorites(), ...Store.history().take(10)]) {
@@ -916,13 +930,15 @@ class Sorter {
 }
 
 /* ============================================================
-   ✅ إضافات منطق السلاسل والدمج
-   ============================================================ */
+✅ إضافات منطق السلاسل والدمج
+============================================================ */
+
 class SeriesItem {
   final bool isSeries;
   final Movie? movie;
   final String? seriesTitle;
   final List<Movie>? parts;
+  
   SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
   SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
 }
@@ -959,6 +975,7 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
       e.absorb(m);
     }
   }
+  
   final seriesMap = <String, List<Movie>>{};
   final nonSeries = <Movie>[];
   for (final m in deduped) {
@@ -969,10 +986,12 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
       nonSeries.add(m);
     }
   }
+  
   final result = <SeriesItem>[];
   for (final m in nonSeries) {
     result.add(SeriesItem.movie(m));
   }
+  
   for (final entry in seriesMap.entries) {
     final parts = entry.value;
     if (parts.length >= 2) {
@@ -983,17 +1002,20 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
       result.add(SeriesItem.movie(parts.first));
     }
   }
+  
   result.sort((a, b) {
     final dateA = a.isSeries ? (a.parts?.first.date ?? 0) : (a.movie?.date ?? 0);
     final dateB = b.isSeries ? (b.parts?.first.date ?? 0) : (b.movie?.date ?? 0);
     return dateB.compareTo(dateA);
   });
+  
   return result;
 }
 
 /* ============================================================
-   ✅ السلاسل الذكية المحسّنة
-   ============================================================ */
+✅ السلاسل الذكية المحسّنة
+============================================================ */
+
 class SeriesRegistry {
   static final Map<String, List<Movie>> parts = {};
   static bool isSeries(String id) => parts.containsKey(id);
@@ -1031,15 +1053,18 @@ List<Movie> groupMoviesSmart(List<Movie> all) {
   final deduped = Smart.dedup(all);
   final clusters = <String, List<Movie>>{};
   final singles = <Movie>[];
+  
   for (final m in deduped) {
     final b = seriesBase(m.title);
     if (b.isEmpty) { singles.add(m); continue; }
     clusters.putIfAbsent(b, () => []).add(m);
   }
+  
   final keys = clusters.keys.toList();
   final parent = <String, String>{for (final k in keys) k: k};
   String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
   final wordSets = <String, Set<String>>{for (final k in keys) k: k.split('_').toSet()};
+  
   for (var i = 0; i < keys.length; i++) {
     for (var j = i + 1; j < keys.length; j++) {
       if (wordSets[keys[i]]!.any(wordSets[keys[j]]!.contains)) {
@@ -1047,10 +1072,12 @@ List<Movie> groupMoviesSmart(List<Movie> all) {
       }
     }
   }
+  
   final merged = <String, List<Movie>>{};
   for (final k in keys) {
     merged.putIfAbsent(find(k), () => []).addAll(clusters[k]!);
   }
+  
   final result = <Movie>[...singles];
   for (final list in merged.values) {
     if (list.length >= 2) {
@@ -1061,16 +1088,109 @@ List<Movie> groupMoviesSmart(List<Movie> all) {
       result.addAll(list);
     }
   }
+  
   result.sort((a, b) => b.date.compareTo(a.date));
   return result;
 }
 
 /* ============================================================
-   ✅ النسخ الاحتياطي الخارجي
-   ============================================================ */
+✅ محرك تجميع السلاسل الذكي عبر TMDB (Client-Side)
+============================================================ */
+
+class SeriesGrouper {
+  static final RegExp _partRegex = RegExp(r'(part|جزء|الجزء)\s*(\d+)', caseSensitive: false);
+  
+  static Future<List<Movie>> process(List<Movie> movies) async {
+    final Map<String, List<Movie>> potentialSeries = {};
+    final List<Movie> standalone = [];
+    
+    // 1. تجميع مبدئي للأفلام التي تحتوي على كلمات "Part/جزء"
+    for (final m in movies) {
+      final match = _partRegex.firstMatch(m.title);
+      if (match != null) {
+        final baseTitle = m.title.substring(0, match.start).trim().replaceAll(RegExp(r'[\-\|:]$'), '').trim();
+        final key = Search.norm(baseTitle);
+        if (key.length > 3) {
+          potentialSeries.putIfAbsent(key, () => []).add(m);
+        } else {
+          standalone.add(m);
+        }
+      } else {
+        standalone.add(m);
+      }
+    }
+    
+    final List<Movie> result = [...standalone];
+    
+    // 2. التحقق عبر TMDB للمجموعات المحتملة
+    for (final entry in potentialSeries.entries) {
+      if (entry.value.length < 2) {
+        result.addAll(entry.value);
+        continue;
+      }
+      
+      // ترتيب الأجزاء تصاعدياً
+      final sortedParts = entry.value
+        ..sort((a, b) {
+          final matchA = _partRegex.firstMatch(a.title);
+          final matchB = _partRegex.firstMatch(b.title);
+          final numA = int.tryParse(matchA?.group(2) ?? '0') ?? 0;
+          final numB = int.tryParse(matchB?.group(2) ?? '0') ?? 0;
+          return numA.compareTo(numB);
+        });
+      
+      // التحقق من TMDB لأول فيلم
+      final firstMovie = sortedParts.first;
+      final searchResult = await Tmdb.search(firstMovie.title);
+      
+      if (searchResult != null && searchResult['id'] != null) {
+        final details = await Tmdb.getDetails(searchResult['id'] as int);
+        final collection = details?['belongs_to_collection'];
+        
+        // إذا أكد TMDB أنها سلسلة رسمية
+        if (collection != null && collection['name'] != null) {
+          final collectionName = collection['name'].toString();
+          
+          final seriesMovie = Movie(
+            channel: firstMovie.channel,
+            msgId: firstMovie.msgId,
+            title: collectionName,
+            poster: firstMovie.poster,
+            videoUrl: '',
+            description: 'سلسلة تحتوي على ${sortedParts.length} أجزاء',
+            genres: firstMovie.genres,
+            quality: 'سلسلة',
+            size: '',
+            duration: '',
+            date: firstMovie.date,
+            alts: sortedParts.map((p) => {
+              'q': p.title,
+              'url': p.videoUrl,
+              'size': p.size,
+              'duration': p.duration,
+            }).toList(),
+          );
+          result.add(seriesMovie);
+          continue;
+        }
+      }
+      
+      // إذا فشل التحقق من TMDB
+      result.addAll(sortedParts);
+    }
+    
+    result.sort((a, b) => b.date.compareTo(a.date));
+    return result;
+  }
+}
+
+/* ============================================================
+✅ النسخ الاحتياطي الخارجي
+============================================================ */
+
 class Backup {
   static const _ch = MethodChannel('tele_cinema/device');
-
+  
   static Future<String> exportAll() async {
     try {
       final data = await Store.exportAll();
@@ -1085,7 +1205,7 @@ class Backup {
       return '❌ خطأ: $e';
     }
   }
-
+  
   static Future<String> importAll() async {
     try {
       final content = await _ch.invokeMethod('readFromDownloads', {
