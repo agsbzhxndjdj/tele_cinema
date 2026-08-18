@@ -671,7 +671,7 @@ class _TvPlayerState extends State<TvPlayer> {
     }
   }
 
-  void _void _poke() {
+  void _poke() {
     _hide?.cancel();
     _hide = Timer(const Duration(seconds: 4), () {
       if (mounted) setState(() => _ui = false);
