@@ -118,7 +118,7 @@ if (mounted) setState(() => _busy = false);
 }
 List<Movie> get _base {
 var src = App.scope.value == 'all' ? Store.all() : Store.moviesOf(App.scope.value);
-// src = Smart.dedup(src);  // معلّق
+src = groupMoviesSmart(src);
 // سنستخدم groupMoviesWithSeries في البناء مباشرة
 if (Store.getBool('hideWatched')) src = src.where((m) => !_isFinished(m)).toList();
 if (Store.getBool('kidsMode')) {
@@ -158,7 +158,7 @@ for (final m in movies) genres.addAll(m.genres.take(3));
 final today = movies.isEmpty ? null : movies[(DateTime.now().millisecondsSinceEpoch ~/ 86400000) % movies.length];
 final listView = Store.getBool('listView');
 return Scaffold(
-appBar: AppBar(title: Text(Lang.t('appName')), actions: [
+appBar: AppBar(title: Text(Lang.t('appName')), actions: [SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize: MainAxisSize.min, children: [
 IconButton(icon: const Icon(Icons.search), onPressed: () => setState(() => _searching = !_searching)),
 IconButton(icon: const Icon(Icons.casino), onPressed: _random),
 PopupMenuButton<String>(
@@ -176,18 +176,19 @@ _sortItem('smart', '✨ ذكي (حسب ذوقك)'),
 ),
 IconButton(icon: const Icon(Icons.explore_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
 IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
+IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
 IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () {
-final allItems = groupMoviesWithSeries(Store.all());
-final seriesOnly = allItems.where((i) => i.isSeries).toList();
+final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
 if (seriesOnly.isEmpty) {
 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
 return;
 }
-Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesScreen(items: seriesOnly)));
+Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
 }),
 IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
+IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
-], bottom: _searching
+]),], bottom: _searching
 ? PreferredSize(preferredSize: const Size.fromHeight(56),
 child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
 child: TextField(controller: _search, onChanged: (_) => setState(() {}),
@@ -282,10 +283,7 @@ SnackBar(content: Text('الجودة: ${m.quality}'), duration: const Duration(m
 }
 @override
 Widget build(BuildContext context) => Card(key: ValueKey('card_${m.id}_${Store.tick.value}'), clipBehavior: Clip.antiAlias, margin: const EdgeInsets.all(6),
-child: InkWell(onTap: () {
-  // إذا كان فيلم عادي، افتح التفاصيل
-  Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: m)));
-},
+child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SeriesRegistry.isSeries(m.id) ? SeriesPartsScreen(m: m) : MovieDetailsScreen(m: m))),
 child: Stack(fit: StackFit.expand, children: [
 m.poster.isNotEmpty
 ? (Store.getBool('heroFx', true)
@@ -311,7 +309,8 @@ child: Row(mainAxisSize: MainAxisSize.min, children: [
 const Icon(Icons.hd, size: 13, color: Colors.white),
 Text(' ${m.qualityOptions.length}', style: const TextStyle(fontSize: 9, color: Colors.white)),
 ])))),
-if (Store.isPinned(m.id))
+if (SeriesRegistry.isSeries(m.id))
+Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
 Positioned(top: 6, left: 6, child: Icon(Icons.push_pin, size: 16, color: AppTheme.accent)),
 if (m.duration.isNotEmpty)
 Positioned(bottom: 30, left: 6, child: Text(m.duration, style: const TextStyle(fontSize: 9, color: Colors.white70))),
@@ -415,7 +414,7 @@ Store.getBool('heroFx', true)
 Container(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
 colors: [Colors.black.withOpacity(0.3), Colors.black.withOpacity(0.5), const Color(0xFF0B0F14)]))),
 ])),
-SafeArea(child: Column(children: [
+SafeArea(child: ListView(children: [
 Row(children: [
 IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context)),
 Expanded(child: Text(m.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -429,7 +428,7 @@ ValueListenableBuilder<int>(valueListenable: Store.tick, builder: (_, __, ___) =
 icon: Icon(Store.isFav(m.id) ? Icons.favorite : Icons.favorite_border, color: Store.isFav(m.id) ? Colors.red : Colors.white70),
 onPressed: () => Store.toggleFav(m))),
 ]),
-const Spacer(),
+const SizedBox(height: 8),
 Container(padding: const EdgeInsets.all(16),
 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
 Text(m.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
@@ -472,6 +471,10 @@ CircleAvatar(child: Text((c['name'] ?? '؟').toString().split(' ').where((e) => 
 const SizedBox(height: 4),
 SizedBox(width: 70, child: Text((c['name'] ?? '').toString(), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9))),
 ]))).toList())),
+],
+if (SeriesRegistry.isSeries(m.id)) ...[
+const SizedBox(height: 12),
+Wrap(spacing: 6, runSpacing: 6, children: SeriesRegistry.partsOf(m.id).asMap().entries.map((e) => ActionChip(label: Text('الجزء ${e.key + 1}', style: const TextStyle(fontSize: 10)), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: e.value))))).toList()),
 ],
 if (Parts.partsOf(m).isNotEmpty) ...[
 const SizedBox(height: 12),
@@ -1263,4 +1266,62 @@ class AllSeriesScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+                                                         /* ============================================================
+   ✅ شاشات السلاسل الجديدة (تُلصق في نهاية ui.dart)
+   ============================================================ */
+class SeriesPartsScreen extends StatelessWidget {
+final Movie m;
+const SeriesPartsScreen({super.key, required this.m});
+@override
+Widget build(BuildContext context) {
+final parts = SeriesRegistry.partsOf(m.id);
+return Scaffold(
+backgroundColor: const Color(0xFF0B0F14),
+appBar: AppBar(backgroundColor: const Color(0xFF0B0F14), foregroundColor: Colors.white, title: Text('سلسلة ${seriesDisplayName(m)} (${parts.length} أجزاء)')),
+body: ListView.builder(
+padding: const EdgeInsets.all(12),
+itemCount: parts.length,
+itemBuilder: (_, i) {
+final p = parts[i];
+return Card(color: const Color(0xFF1B2430), margin: const EdgeInsets.only(bottom: 10),
+child: ListTile(
+leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: p.poster.isNotEmpty ? CachedNetworkImage(imageUrl: p.poster, width: 55, height: 80, fit: BoxFit.cover, errorWidget: (_, __, ___) => const Icon(Icons.movie)) : const Icon(Icons.movie)),
+title: Text('الجزء ${i + 1}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white)),
+subtitle: Text(p.title.split('\n').first, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+trailing: p.quality.isNotEmpty ? Chip(label: Text(p.quality, style: const TextStyle(fontSize: 10)), backgroundColor: AppTheme.accent.withOpacity(0.2)) : null,
+onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => MovieDetailsScreen(m: p))),
+),
+);
+},
+),
+);
+}
+}
+
+class AllSeriesGrid extends StatelessWidget {
+final List<Movie> reps;
+const AllSeriesGrid({super.key, required this.reps});
+@override
+Widget build(BuildContext context) => Scaffold(
+backgroundColor: const Color(0xFF0B0F14),
+appBar: AppBar(backgroundColor: const Color(0xFF0B0F14), foregroundColor: Colors.white, title: const Text('كل السلاسل')),
+body: GridView.builder(
+padding: const EdgeInsets.all(10),
+gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.55),
+itemCount: reps.length,
+itemBuilder: (_, i) {
+final m = reps[i];
+final n = SeriesRegistry.count(m.id);
+return Card(clipBehavior: Clip.antiAlias, color: const Color(0xFF1B2430),
+child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SeriesPartsScreen(m: m))),
+child: Stack(fit: StackFit.expand, children: [
+m.poster.isNotEmpty ? CachedNetworkImage(imageUrl: m.poster, fit: BoxFit.cover, errorWidget: (_, __, ___) => const Icon(Icons.movie_filter, size: 40)) : const Icon(Icons.movie_filter, size: 40),
+Positioned(left: 0, right: 0, bottom: 0, child: Container(padding: const EdgeInsets.all(6), decoration: const BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black87])), child: Text(seriesDisplayName(m), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)))),
+Positioned(top: 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('$n أجزاء', style: const TextStyle(fontSize: 9, color: Colors.white)))),
+])));
+},
+),
+);
 }
