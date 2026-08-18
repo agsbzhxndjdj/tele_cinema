@@ -395,6 +395,7 @@ class _TvHomeState extends State<TvHome> {
                 IconButton(icon: const Icon(Icons.explore_outlined, color: Colors.white70, size: 26), tooltip: 'اكتشف', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
                 IconButton(icon: const Icon(Icons.emoji_events_outlined, color: Colors.white70, size: 26), tooltip: 'انجازاتي', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
                 IconButton(icon: const Icon(Icons.settings, color: Colors.white70, size: 26), tooltip: 'الإعدادات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
+                IconButton(icon: const Icon(Icons.edit_note, color: Colors.white70, size: 26), tooltip: 'إدارة القنوات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageChannelsScreen()))),
                 IconButton(icon: const Icon(Icons.refresh, color: Colors.white70, size: 26), tooltip: 'تحديث', onPressed: _refresh),
                 const SizedBox(width: 6),
                 FilledButton.icon(onPressed: _addDialog, icon: const Icon(Icons.add_link, size: 20), label: Text(Lang.t('addChannel'), style: const TextStyle(fontSize: 14)), style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1B2430), foregroundColor: Colors.white, minimumSize: const Size(0, 44), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))),
@@ -827,4 +828,227 @@ class _TvPlayerState extends State<TvPlayer> {
                         ]))),
             ])));
   }
+  /* ======== شاشة إدارة القنوات ======== */
+class ManageChannelsScreen extends StatefulWidget {
+  const ManageChannelsScreen({super.key});
+  @override
+  State<ManageChannelsScreen> createState() => _ManageChannelsScreenState();
+}
+
+class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
+  Future<void> _deleteChannel(Channel c) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF151B23),
+        title: const Text('حذف القناة', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\n\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(Lang.t('cancel'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+              child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await Store.delChannel(c.username);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تم حذف "${c.title.isEmpty ? c.username : c.title}" ✅'),
+          backgroundColor: Colors.red,
+        ));
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _refreshChannel(Channel c) async {
+    try {
+      final p = await Tg.fetchPage(c.username);
+      final old = Store.moviesOf(c.username);
+      final ids = old.map((e) => e.msgId).toSet();
+      await Store.saveMovies(c.username, [...p.movies, ...old.where((e) => !ids.contains(e.msgId))]);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('تم تحديث "${c.title.isEmpty ? c.username : c.title}" ✅'),
+          backgroundColor: Colors.green,
+        ));
+        setState(() {});
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('فشل التحديث ❌'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+  }
+
+  void _addChannel() {
+    final ctrl = TextEditingController();
+    bool busy = false;
+    showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+            builder: (ctx, setS) => AlertDialog(
+                  backgroundColor: const Color(0xFF151B23),
+                  title: Text(Lang.t('addChannel')),
+                  content: TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                          hintText: Lang.t('addChannelHint'),
+                          filled: true,
+                          fillColor: const Color(0xFF0B0F14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: Text(Lang.t('cancel'))),
+                    FilledButton(
+                        onPressed: busy ? null : () async {
+                          setS(() => busy = true);
+                          final u = Tg.cleanUser(ctrl.text);
+                          if (u.isNotEmpty) {
+                            try {
+                              final p = await Tg.fetchPage(u);
+                              if (p.movies.isNotEmpty) {
+                                await Store.addChannel(Channel(u, title: p.title, avatar: p.avatar));
+                                await Store.saveMovies(u, p.movies);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                setState(() {});
+                              }
+                            } catch (_) {}
+                          }
+                        },
+                        child: Text(Lang.t('addChannel'))),
+                  ],
+                )));
+  }
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+      valueListenable: Store.tick,
+      builder: (_, __, ___) {
+        final chs = Store.channels();
+        return Scaffold(
+          backgroundColor: const Color(0xFF0B0F14),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF0B0F14),
+            elevation: 0,
+            title: const Text('إدارة القنوات', style: TextStyle(color: Colors.white, fontSize: 22)),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              IconButton(
+                icon: Icon(Icons.add_circle, color: AppTheme.accent, size: 30),
+                tooltip: 'إضافة قناة جديدة',
+                onPressed: _addChannel,
+              ),
+            ],
+          ),
+          body: chs.isEmpty
+              ? Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.subscriptions_off, size: 90, color: Colors.grey.withOpacity(0.4)),
+                    const SizedBox(height: 14),
+                    const Text('لا توجد قنوات مضافة', style: TextStyle(fontSize: 20, color: Colors.grey)),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: _addChannel,
+                      icon: const Icon(Icons.add),
+                      label: const Text('إضافة قناة', style: TextStyle(fontSize: 16)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(200, 50),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ]),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(20),
+                  itemCount: chs.length,
+                  itemBuilder: (_, i) {
+                    final c = chs[i];
+                    final moviesCount = Store.moviesOf(c.username).length;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1B2430),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Row(children: [
+                          // الصورة الرمزية
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: c.avatar != null && c.avatar!.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: c.avatar!,
+                                    width: 60,
+                                    height: 60,
+                                    fit: BoxFit.cover,
+                                    errorWidget: (_, __, ___) => Container(
+                                      width: 60,
+                                      height: 60,
+                                      color: const Color(0xFF0B0F14),
+                                      child: const Icon(Icons.subscriptions, color: Colors.white54),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 60,
+                                    height: 60,
+                                    color: const Color(0xFF0B0F14),
+                                    child: const Icon(Icons.subscriptions, color: Colors.white54, size: 30),
+                                  ),
+                          ),
+                          const SizedBox(width: 14),
+                          // المعلومات
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  c.title.isEmpty ? c.username : c.title,
+                                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '@${c.username} • $moviesCount فيلم',
+                                  style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // أزرار الإجراءات
+                          IconButton(
+                            icon: const Icon(Icons.refresh, color: AppTheme.accent, size: 28),
+                            tooltip: 'تحديث',
+                            onPressed: () => _refreshChannel(c),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.red, size: 28),
+                            tooltip: 'حذف',
+                            onPressed: () => _deleteChannel(c),
+                          ),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+        );
+      });
+}
 }
