@@ -828,7 +828,9 @@ class _TvPlayerState extends State<TvPlayer> {
                         ]))),
             ])));
   }
-  /* ======== شاشة إدارة القنوات ======== */
+}
+
+/* ======== شاشة إدارة القنوات ======== */
 class ManageChannelsScreen extends StatefulWidget {
   const ManageChannelsScreen({super.key});
   @override
@@ -956,7 +958,7 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
           body: chs.isEmpty
               ? Center(
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.subscriptions_off, size: 90, color: Colors.grey.withOpacity(0.4)),
+                    Icon(Icons.subscriptions, size: 90, color: Colors.grey.withOpacity(0.4)),
                     const SizedBox(height: 14),
                     const Text('لا توجد قنوات مضافة', style: TextStyle(fontSize: 20, color: Colors.grey)),
                     const SizedBox(height: 20),
@@ -989,7 +991,6 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Row(children: [
-                          // الصورة الرمزية
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: c.avatar != null && c.avatar!.isNotEmpty
@@ -1013,7 +1014,6 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
                                   ),
                           ),
                           const SizedBox(width: 14),
-                          // المعلومات
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1032,9 +1032,8 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
                               ],
                             ),
                           ),
-                          // أزرار الإجراءات
                           IconButton(
-                            icon: const Icon(Icons.refresh, color: AppTheme.accent, size: 28),
+                            icon: Icon(Icons.refresh, color: AppTheme.accent, size: 28),
                             tooltip: 'تحديث',
                             onPressed: () => _refreshChannel(c),
                           ),
@@ -1050,5 +1049,4 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
                 ),
         );
       });
-}
 }
