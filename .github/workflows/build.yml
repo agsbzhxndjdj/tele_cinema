@@ -30,265 +30,160 @@ jobs:
 
       - name: Inject keystore + google-services
         run: |
-          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; fi
-          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; fi
-          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; fi
+          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
+          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
+          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
 
-      - name: Patch gradle (SDK 35 + Signing)
+      - name: Patch gradle + manifest (Foolproof)
         run: |
           python3 << 'PYEOF'
-          import os
+          import re
           NL = chr(10)
-          # settings.gradle
           p = 'android/settings.gradle'
-          if os.path.exists(p):
-              s = open(p).read()
-              if 'google-services' not in s:
-                  a = s.find('plugins')
-                  if a >= 0:
-                      b = s.find('{', a)
-                      c = s.find('}', b)
-                      s = s[:c] + NL + '    id "com.google.gms.google-services" version "4.4.0" apply false' + NL + s[c:]
-                      open(p, 'w').write(s)
-          # app/build.gradle
+          s = open(p).read()
+          if 'google-services' not in s:
+              a = s.find('plugins')
+              if a != -1:
+                  b = s.find('{', a)
+                  c = s.find('}', b)
+                  s = s[:c] + NL + '    id "com.google.gms.google-services" version "4.4.0" apply false' + NL + s[c:]
+                  open(p, 'w').write(s)
+                  print('settings.gradle patched')
           p = 'android/app/build.gradle'
-          if os.path.exists(p):
-              s = open(p).read()
-              if 'com.google.gms.google-services' not in s:
-                  a = s.find('plugins')
-                  if a >= 0:
-                      b = s.find('{', a)
-                      c = s.find('}', b)
-                      s = s[:c] + NL + '    id "com.google.gms.google-services"' + NL + s[c:]
-              sig = '    signingConfigs {' + NL
-              sig += '        release {' + NL
-              sig += "            storeFile file('telecinema.keystore')" + NL
-              sig += "            storePassword '12345678'" + NL
-              sig += "            keyAlias 'telecinema'" + NL
-              sig += "            keyPassword '12345678'" + NL
-              sig += '        }' + NL + '    }' + NL
-              if 'signingConfigs' not in s:
-                  s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
-              s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-              out = []
-              for line in s.split(NL):
-                  if 'compileSdk' in line and 'compileSdkVersion' not in line:
-                      out.append('    compileSdk = 35')
-                  elif 'targetSdk' in line and 'targetSdkVersion' not in line:
-                      out.append('    targetSdk = 35')
-                  elif 'minSdk' in line and 'minSdkVersion' not in line:
-                      out.append('    minSdk = 21')
-                  else:
-                      out.append(line)
-              open(p, 'w').write(NL.join(out))
-              print('gradle patched')
+          s = open(p).read()
+          if 'com.google.gms.google-services' not in s:
+              a = s.find('plugins')
+              if a != -1:
+                  b = s.find('{', a)
+                  c = s.find('}', b)
+                  s = s[:c] + NL + '    id "com.google.gms.google-services"' + NL + s[c:]
+          sig = '    signingConfigs {' + NL
+          sig += '        release {' + NL
+          sig += "            storeFile file('telecinema.keystore')" + NL
+          sig += "            storePassword '12345678'" + NL
+          sig += "            keyAlias 'telecinema'" + NL
+          sig += "            keyPassword '12345678'" + NL
+          sig += '        }' + NL
+          sig += '    }' + NL
+          if 'signingConfigs' not in s:
+              s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
+          s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
+          out = []
+          for line in s.split(NL):
+              if 'compileSdk' in line and 'compileSdkVersion' not in line:
+                  out.append('    compileSdk = 35')
+              elif 'targetSdk' in line and 'targetSdkVersion' not in line:
+                  out.append('    targetSdk = 35')
+              elif 'minSdk' in line and 'minSdkVersion' not in line:
+                  out.append('    minSdk = 21')
+              else:
+                  out.append(line)
+          s = NL.join(out)
+          open(p, 'w').write(s)
+          print('build.gradle patched (SDK 35)')
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p, encoding='utf-8').read()
+          if 'leanback' not in s:
+              s = s.replace('<application', '<uses-feature android:name="android.software.leanback" android:required="false" />' + NL + '    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />' + NL + '    <application', 1)
+          if 'usesCleartextTraffic' not in s:
+              s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
+          if 'LEANBACK_LAUNCHER' not in s:
+              s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>', '<category android:name="android.intent.category.LAUNCHER"/>' + NL + '                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>', 1)
+          if 'POST_NOTIFICATIONS' not in s:
+              s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>', '<uses-permission android:name="android.permission.INTERNET"/>' + NL + '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>', 1)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('manifest patched')
           PYEOF
-          grep -n "compileSdk" android/app/build.gradle || true
-
-      - name: Patch AndroidManifest
-        run: |
-          F=android/app/src/main/AndroidManifest.xml
-          if [ -f "$F" ]; then
-            if ! grep -q leanback "$F"; then
-              sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' "$F"
-            fi
-            if ! grep -q usesCleartextTraffic "$F"; then
-              sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$F"
-            fi
-            sed -i 's|android:label="[^"]*"|android:label="تلي سينما"|' "$F"
-            if ! grep -q LEANBACK_LAUNCHER "$F"; then
-              sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' "$F"
-            fi
-            if ! grep -q POST_NOTIFICATIONS "$F"; then
-              sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' "$F"
-            fi
-          fi
 
       - name: Patch MainActivity
         run: |
-          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" 2>/dev/null | head -n 1)
-          if [ -n "$MAIN_ACT" ]; then
-            PKG=$(head -n 1 "$MAIN_ACT")
-            {
-              echo "$PKG"
-              echo ''
-              echo 'import android.content.pm.PackageManager'
-              echo 'import io.flutter.embedding.android.FlutterActivity'
-              echo 'import io.flutter.embedding.engine.FlutterEngine'
-              echo 'import io.flutter.plugin.common.MethodChannel'
-              echo ''
-              echo 'class MainActivity : FlutterActivity() {'
-              echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
-              echo '        super.configureFlutterEngine(flutterEngine)'
-              echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
-              echo '            .setMethodCallHandler { call, result ->'
-              echo '                if (call.method == "isTv") {'
-              echo '                    val pm = packageManager'
-              echo '                    result.success('
-              echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
-              echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
-              echo '                    )'
-              echo '                } else if (call.method == "openExternal") {'
-              echo '                    val url = call.argument<String>("url")'
-              echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
-              echo '                    val uri = android.net.Uri.parse(url)'
-              echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
-              echo '                    intent.setDataAndType(uri, "video/*")'
-              echo '                    try {'
-              echo '                        startActivity(android.content.Intent.createChooser(intent, "Play with"))'
-              echo '                        result.success(true)'
-              echo '                    } catch (e: Exception) {'
-              echo '                        result.success(false)'
-              echo '                    }'
-              echo '                } else {'
-              echo '                    result.notImplemented()'
-              echo '                }'
-              echo '            }'
-              echo '    }'
-              echo '}'
-            } > "$MAIN_ACT"
-          fi
+          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
+          PKG=$(head -n 1 "$MAIN_ACT")
+          {
+            echo "$PKG"
+            echo ''
+            echo 'import android.content.pm.PackageManager'
+            echo 'import io.flutter.embedding.android.FlutterActivity'
+            echo 'import io.flutter.embedding.engine.FlutterEngine'
+            echo 'import io.flutter.plugin.common.MethodChannel'
+            echo ''
+            echo 'class MainActivity : FlutterActivity() {'
+            echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
+            echo '        super.configureFlutterEngine(flutterEngine)'
+            echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
+            echo '            .setMethodCallHandler { call, result ->'
+            echo '                if (call.method == "isTv") {'
+            echo '                    val pm = packageManager'
+            echo '                    result.success('
+            echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
+            echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
+            echo '                    )'
+            echo '                } else if (call.method == "openExternal") {'
+            echo '                    val url = call.argument<String>("url")'
+            echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
+            echo '                    val uri = android.net.Uri.parse(url)'
+            echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
+            echo '                    intent.setDataAndType(uri, "video/*")'
+            echo '                    try {'
+            echo '                        startActivity(android.content.Intent.createChooser(intent, "تشغيل بواسطة"))'
+            echo '                        result.success(true)'
+            echo '                    } catch (e: Exception) {'
+            echo '                        result.success(false)'
+            echo '                    }'
+            echo '                } else {'
+            echo '                    result.notImplemented()'
+            echo '                }'
+            echo '            }'
+            echo '    }'
+            echo '}'
+          } > "$MAIN_ACT"
 
       - name: Prepare (pub get + icons)
         run: |
           flutter pub get
           flutter pub run flutter_launcher_icons:main || true
 
-      # =====================================================
-      # ✅✅✅ إصلاح مضمون 100% لملفات Dart - باستخدام chr() ✅✅✅
-      # =====================================================
-      - name: Fix Dart files (Bulletproof Method)
+      - name: Fix Dart string literals (Bulletproof)
         run: |
           python3 << 'PYEOF'
           import os
-          import re
-          
-          NL = chr(10)     # سطر جديد فعلي
-          BSN = chr(92) + 'n'  # \n الصحيح
-          
+          NL = chr(10)
+          BSN = chr(92) + 'n'
           files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
-          
           for fp in files:
               if not os.path.exists(fp):
-                  print('SKIP ' + fp)
+                  print('skip ' + fp)
                   continue
-              
-              with open(fp, 'r', encoding='utf-8') as f:
-                  content = f.read()
-              
-              orig = content
-              
-              # === الخطوة 1: حماية \n الصحيح داخل split/join ===
-              PROT_S = '___PROTECTED_SPLIT_NL___'
-              PROT_J = '___PROTECTED_JOIN_NL___'
-              content = content.replace("split('" + BSN + "')", PROT_S)
-              content = content.replace("join('" + BSN + "')", PROT_J)
-              
-              # === الخطوة 2: تحويل كل \n حرفي (backslash+n) إلى سطر جديد فعلي ===
-              if BSN in content:
-                  content = content.replace(BSN, NL)
-              
-              # === الخطوة 3: استعادة split/join المحمية ===
-              content = content.replace(PROT_S, "split('" + BSN + "')")
-              content = content.replace(PROT_J, "join('" + BSN + "')")
-              
-              # === الخطوة 4: إصلاح split(' + سطر جديد + ') => split('\n') ===
-              # النمط: split( ثم ' ثم سطر جديد ثم ' ثم )
-              pattern1 = "split('" + NL + "')"
-              replacement1 = "split('" + BSN + "')"
-              while pattern1 in content:
-                  content = content.replace(pattern1, replacement1)
-              
-              pattern2 = "join('" + NL + "')"
-              replacement2 = "join('" + BSN + "')"
-              while pattern2 in content:
-                  content = content.replace(pattern2, replacement2)
-              
-              # === الخطوة 5: إصلاح النصوص العربية متعددة الأسطر ===
-              # نبحث عن: ؟ + سطر جديد + سيتم
+              content = open(fp, encoding='utf-8').read()
+              original = content
+              content = content.replace("split('" + BSN + "')", '___PS___')
+              content = content.replace("join('" + BSN + "')", '___PJ___')
+              content = content.replace(BSN, NL)
+              content = content.replace('___PS___', "split('" + BSN + "')")
+              content = content.replace('___PJ___', "join('" + BSN + "')")
+              content = content.replace("split('" + NL + "')", "split('" + BSN + "')")
+              content = content.replace("join('" + NL + "')", "join('" + BSN + "')")
               content = content.replace('؟' + NL + 'سيتم', '؟' + BSN + 'سيتم')
-              
-              # === الخطوة 6: إصلاح النصوص متعددة الأسطر بشكل عام ===
-              lines = content.split(NL)
-              fixed = []
-              i = 0
-              while i < len(lines):
-                  line = lines[i]
-                  stripped = line.rstrip()
-                  
-                  # عدّ علامات التنصيص الفردية
-                  sq = 0
-                  for idx, ch in enumerate(stripped):
-                      if ch == "'" and (idx == 0 or stripped[idx-1] != chr(92)):
-                          sq += 1
-                  
-                  # إذا عدد فردي، النص مكسور
-                  if sq % 2 == 1 and i + 1 < len(lines):
-                      nxt = lines[i + 1]
-                      nxt_s = nxt.lstrip()
-                      
-                      # لا تدمج إذا كان السطر التالي كود جديد
-                      reserved = ('class ', 'void ', 'static ', 'final ', 'var ',
-                                  'return ', 'if ', 'for ', 'while ', 'import ',
-                                  '@override', '//', '/*', '}', 'Widget ', 'Future',
-                                  'List', 'Map', 'String ', 'bool ', 'int ', 'double ',
-                                  'IconButton', 'Text(', 'Padding(', 'Container(',
-                                  'Column(', 'Row(', 'SizedBox(', 'Expanded(')
-                      is_code = False
-                      for r in reserved:
-                          if nxt_s.startswith(r):
-                              is_code = True
-                              break
-                      
-                      if not is_code and len(nxt_s) < 300 and nxt_s:
-                          # ادمج السطرين مع \n
-                          merged = stripped + BSN + nxt_s
-                          fixed.append(merged)
-                          i += 2
-                          continue
-                  
-                  fixed.append(line)
-                  i += 1
-              
-              content = NL.join(fixed)
-              
-              # === الخطوة 7: إصلاح rawJson cast ===
               content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
-              content = content.replace('rawJson: item)', 'rawJson: Map<String, dynamic>.from(item))')
-              
-              # === الخطوة 8: تنظيف ===
-              while NL + NL + NL + NL in content:
-                  content = content.replace(NL + NL + NL + NL, NL + NL + NL)
-              
-              if content != orig:
-                  with open(fp, 'w', encoding='utf-8') as f:
-                      f.write(content)
+              if content != original:
+                  open(fp, 'w', encoding='utf-8').write(content)
                   print('FIXED ' + fp)
               else:
                   print('OK ' + fp)
-          
-          print('DONE')
+          print('DART FIX DONE')
           PYEOF
-          echo "=== Verification ==="
-          echo "split patterns:"
-          grep -n "split(" lib/core.dart lib/tv.dart lib/ui.dart | head -20 || true
-          echo ""
-          echo "Line counts:"
-          wc -l lib/core.dart lib/tv.dart lib/ui.dart
 
       - name: Build MOBILE APK
         run: |
-          echo "=== Building Mobile APK ==="
+          echo "=== بناء تطبيق الجوال ==="
           flutter build apk --release -t lib/main.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
 
       - name: Build TV APK
         run: |
-          echo "=== Building TV APK ==="
-          F=android/app/src/main/AndroidManifest.xml
-          if [ -f "$F" ]; then
-            sed -i 's|android:label="[^"]*"|android:label="تلي سينما TV"|' "$F"
-          fi
+          echo "=== بناء تطبيق التلفزيون ==="
+          sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
 
