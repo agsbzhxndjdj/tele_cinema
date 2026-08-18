@@ -1014,3 +1014,83 @@ List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
   
   return result;
 }
+
+/* ============================================================
+   ✅ السلاسل الذكية المحسّنة (تُلصق في نهاية core.dart)
+   ============================================================ */
+class SeriesRegistry {
+static final Map<String, List<Movie>> parts = {};
+static bool isSeries(String id) => parts.containsKey(id);
+static List<Movie> partsOf(String id) => parts[id] ?? [];
+static int count(String id) => parts[id]?.length ?? 0;
+}
+
+/// استخراج اسم السلسلة: إنجليزي فقط، بدون رموز، بدون and/the
+String seriesBase(String title) {
+var t = title.trim().split('\n').first.trim();
+t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
+t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'(?:part|جزء|الجزء)\s*:?\s*\S+', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
+t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
+const generic = ['the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your'];
+final words = <String>[];
+for (var w in t.split(RegExp(r'\s+'))) {
+w = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+if (w.length < 3) continue;
+if (generic.contains(w)) continue;
+if (RegExp(r'^\d+$').hasMatch(w)) continue;
+words.add(w);
+}
+if (words.isEmpty) return '';
+return words.take(2).join('_');
+}
+
+String seriesDisplayName(Movie m) {
+final b = seriesBase(m.title);
+return b.isEmpty ? m.title : b.replaceAll('_', ' ');
+}
+
+/// تجميع ذكي: دمج الجودات + سلاسل (مع دمج بالكلمة المشتركة)
+List<Movie> groupMoviesSmart(List<Movie> all) {
+SeriesRegistry.parts.clear();
+final deduped = Smart.dedup(all);
+final clusters = <String, List<Movie>>{};
+final singles = <Movie>[];
+for (final m in deduped) {
+final b = seriesBase(m.title);
+if (b.isEmpty) { singles.add(m); continue; }
+clusters.putIfAbsent(b, () => []).add(m);
+}
+// دمج المجموعات التي تشترك بأي كلمة (fast_furious + furious + bourne_supremacy + bourne_ultimatum)
+final keys = clusters.keys.toList();
+final parent = <String, String>{for (final k in keys) k: k};
+String find(String x) {
+while (parent[x] != x) { parent[x] = parent[parent[x]]!; x = parent[x]; }
+return x;
+}
+final wordSets = <String, Set<String>>{for (final k in keys) k: k.split('_').toSet()};
+for (var i = 0; i < keys.length; i++) {
+for (var j = i + 1; j < keys.length; j++) {
+if (wordSets[keys[i]]!.any(wordSets[keys[j]]!.contains)) {
+parent[find(keys[i])] = find(keys[j]);
+}
+}
+}
+final merged = <String, List<Movie>>{};
+for (final k in keys) {
+merged.putIfAbsent(find(k), () => []).addAll(clusters[k]!);
+}
+final result = <Movie>[...singles];
+for (final list in merged.values) {
+if (list.length >= 2) {
+list.sort((a, b) => a.msgId.compareTo(b.msgId));
+for (final m in list) { SeriesRegistry.parts[m.id] = list; }
+result.add(list.first);
+} else {
+result.addAll(list);
+}
+}
+result.sort((a, b) => b.date.compareTo(a.date));
+return result;
+}
