@@ -1097,7 +1097,7 @@ const SizedBox(height: 16),
 Row(children: [
 Expanded(child: OutlinedButton.icon(onPressed: () async { final r = await Backup.exportAll(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }, icon: const Icon(Icons.upload_file), label: const Text('تصدير كل البيانات'))),
 const SizedBox(width: 8),
-Expanded(child: OutlinedButton.icon(onPressed: () async { final r = await Backup.importAll(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }, icon: const Icon(Icons.download_file), label: const Text('استيراد'))),
+Expanded(child: OutlinedButton.icon(onPressed: () async { final r = await Backup.importAll(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }, icon: const Icon(Icons.file_download), label: const Text('استيراد'))),
 ]),
 const SizedBox(height: 8),
 if (Store.channels().isEmpty)
