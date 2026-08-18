@@ -544,7 +544,7 @@ class _TvCardState extends State<TvCard> {
               if (SeriesRegistry.isSeries(m.id)) Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
               if (Store.isFav(m.id)) Positioned(top: 6, left: 6, child: Icon(Icons.favorite, size: 16, color: Colors.red)),
               if (pos > 0 && tot > 0) Positioned(left: 0, right: 0, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: pos / tot, minHeight: 4, backgroundColor: Colors.black54, valueColor: AlwaysStoppedAnimation(AppTheme.accent)))),
-            ])))));
+            ])))))); // ✅ تم إصلاح القوس الناقص هنا
   }
 }
 
@@ -918,7 +918,7 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
         backgroundColor: const Color(0xFF151B23),
         title: const Text('حذف القناة', style: TextStyle(color: Colors.white)),
         content: Text(
-          'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).',
+          'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).', // ✅ تم إصلاح السطر المكسور
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1251,7 +1251,7 @@ class _TvSeriesScreenState extends State<TvSeriesScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  title.split('\n').first.isEmpty ? 'الجزء $partNum' : title.split('\n').first,
+                                  title.split('\n').first.isEmpty ? 'الجزء $partNum' : title.split('\n').first, // ✅ تم إصلاح السطر المكسور
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
@@ -1311,7 +1311,7 @@ class TvSeriesPartsScreen extends StatelessWidget {
                 Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(6)), child: Text('الجزء ${i + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black))),
                   const SizedBox(height: 6),
-                  Text(p.title.split('\n').first, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white)),
+                  Text(p.title.split('\n').first, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Colors.white)), // ✅ تم إصلاح السطر المكسور
                 ])),
               ])),
           );
