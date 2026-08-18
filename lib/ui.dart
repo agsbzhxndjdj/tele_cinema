@@ -188,7 +188,7 @@ Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: se
 IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
 IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
-]),], bottom: _searching
+])], bottom: _searching
 ? PreferredSize(preferredSize: const Size.fromHeight(56),
 child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
 child: TextField(controller: _search, onChanged: (_) => setState(() {}),
