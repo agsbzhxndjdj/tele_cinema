@@ -1066,8 +1066,6 @@ clusters.putIfAbsent(b, () => []).add(m);
 final keys = clusters.keys.toList();
 final parent = <String, String>{for (final k in keys) k: k};
 String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
-return x;
-}
 final wordSets = <String, Set<String>>{for (final k in keys) k: k.split('_').toSet()};
 for (var i = 0; i < keys.length; i++) {
 for (var j = i + 1; j < keys.length; j++) {
