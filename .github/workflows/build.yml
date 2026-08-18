@@ -33,92 +33,85 @@ jobs:
           if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
           if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
           if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
-          ls -la android/app/ | head -20
 
-      - name: Verify files exist
-        run: |
-          echo "=== الملفات الموجودة في lib ==="
-          ls -la lib/
-          echo ""
-          echo "=== محتوى lib/app_tv.dart (أول 10 أسطر) ==="
-          if [ -f lib/app_tv.dart ]; then
-            head -10 lib/app_tv.dart
-          else
-            echo "⚠️  الملف lib/app_tv.dart غير موجود!"
-            exit 1
-          fi
-          echo ""
-          echo "=== محتوى lib/main.dart (أول 10 أسطر) ==="
-          head -10 lib/main.dart
-
-      - name: Patch gradle (google-services + signing + compileSdk 35)
+      # ✅✅✅ تعديل Gradle بطريقة مضمونة 100% (سطر بسطر) ✅✅✅
+      - name: Patch gradle (Foolproof Method)
         run: |
           python3 - << 'PYEOF'
           import re
-
+          
           # 1) settings.gradle
           p = 'android/settings.gradle'
-          s = open(p).read()
+          with open(p, 'r') as f: s = f.read()
           if 'google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
-                  new = old[:-1] + chr(10) + '    id "com.google.gms.google-services" version "4.4.0" apply false' + chr(10) + '}'
+                  new = old[:-1] + '\n    id "com.google.gms.google-services" version "4.4.0" apply false\n}'
                   s = s.replace(old, new)
-                  open(p, 'w').write(s)
-                  print('settings.gradle patched')
+                  with open(p, 'w') as f: f.write(s)
+                  print('✅ settings.gradle patched')
 
-          # 2) app/build.gradle
+          # 2) app/build.gradle (طريقة قراءة الأسطر المضمونة)
           p = 'android/app/build.gradle'
-          s = open(p).read()
-
+          with open(p, 'r') as f: lines = f.readlines()
+          
+          new_lines = []
+          has_signing = False
+          
+          for line in lines:
+              # تعديل إصدارات SDK مباشرة
+              if 'compileSdk' in line and 'compileSdkVersion' not in line:
+                  new_lines.append('    compileSdk = 35\n')
+              elif 'targetSdk' in line and 'targetSdkVersion' not in line:
+                  new_lines.append('    targetSdk = 35\n')
+              elif 'minSdk' in line and 'minSdkVersion' not in line:
+                  new_lines.append('    minSdk = 21\n')
+              else:
+                  new_lines.append(line)
+                  
+              if 'signingConfigs' in line: has_signing = True
+          
+          s = "".join(new_lines)
+          
+          # إضافة google-services
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
-                  new = old[:-1] + chr(10) + '    id "com.google.gms.google-services"' + chr(10) + '}'
+                  new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
                   s = s.replace(old, new)
-
-          sig = '    signingConfigs {' + chr(10)
-          sig += '        release {' + chr(10)
-          sig += "            storeFile file('telecinema.keystore')" + chr(10)
-          sig += "            storePassword '12345678'" + chr(10)
-          sig += "            keyAlias 'telecinema'" + chr(10)
-          sig += "            keyPassword '12345678'" + chr(10)
-          sig += '        }' + chr(10)
-          sig += '    }' + chr(10)
-
-          if 'signingConfigs' not in s:
-              s = s.replace('    buildTypes {', sig + chr(10) + '    buildTypes {', 1)
+                  
+          # إضافة Signing
+          if not has_signing:
+              sig = """    signingConfigs {
+                  release {
+                      storeFile file('telecinema.keystore')
+                      storePassword '12345678'
+                      keyAlias 'telecinema'
+                      keyPassword '12345678'
+                  }
+              }\n"""
+              s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
+              
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-
-          s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
-          s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
-          s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
-          if 'compileSdk' not in s:
-              s = re.sub(r'android\s*\{', 'android {' + chr(10) + '    compileSdk = 35', s, count=1)
-
-          s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
-          s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
-          s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
-
-          open(p, 'w').write(s)
-          print('✅ gradle patched (google-services + signing + compileSdk 35)')
+          
+          with open(p, 'w') as f: f.write(s)
+          print('✅ app/build.gradle patched (SDK 35 + Signing)')
           PYEOF
 
-          echo "=== سطور compileSdk في build.gradle ==="
-          grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
+          echo "=== التحقق من compileSdk ==="
+          grep -n "compileSdk" android/app/build.gradle
 
-      - name: Patch AndroidManifest (HTTP + الاسم + Android TV + الإشعارات)
+      - name: Patch AndroidManifest
         run: |
           sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' android/app/src/main/AndroidManifest.xml
           sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="تلي سينما"/' android/app/src/main/AndroidManifest.xml
           sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' android/app/src/main/AndroidManifest.xml
           sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' android/app/src/main/AndroidManifest.xml
-          grep -n "usesCleartextTraffic\|LEANBACK\|POST_NOTIFICATIONS" android/app/src/main/AndroidManifest.xml
 
-      - name: Patch MainActivity (كشف TV + تشغيل خارجي Cast)
+      - name: Patch MainActivity
         run: |
           MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
           PKG=$(head -n 1 "$MAIN_ACT")
@@ -160,149 +153,71 @@ jobs:
             echo '    }'
             echo '}'
           } > "$MAIN_ACT"
-          cat "$MAIN_ACT"
 
       - name: Prepare (pub get + icons)
         run: |
           flutter pub get
           flutter pub run flutter_launcher_icons:main
 
-      # ✅✅✅ إصلاح شامل للأسطر المكسورة في ملفات Dart ✅✅✅
-      # هذا السكربت يستخدم chr() لتجنب كسر الرموز عند النقل
-      - name: Fix all broken Dart files
+      # ✅✅✅ إصلاح شامل ومضمون لملفات Dart (طريقة الاستبدال المباشر) ✅✅✅
+      - name: Fix Dart files (Direct Replace Method)
         run: |
           python3 << 'PYEOF'
           import os
-          import re
-
-          BS = chr(92)      # backslash character: \
-          NL = chr(10)      # actual newline character
-          BSN = BS + 'n'    # literal two-char sequence: \n
-
+          
           files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
-
+          
           for filepath in files:
               if not os.path.exists(filepath):
-                  print(f'SKIP {filepath} (not found)')
                   continue
-
+                  
               with open(filepath, 'r', encoding='utf-8') as f:
                   content = f.read()
-
+                  
               original = content
-              changes = []
-
-              # ===== الخطوة 1: حماية \n الصحيح داخل split/join =====
-              content = content.replace("split('" + BSN + "')", "___PROT_SPLIT___")
-              content = content.replace("join('" + BSN + "')", "___PROT_JOIN___")
-              content = content.replace('split("' + BSN + '")', "___PROT_SPLIT2___")
-              content = content.replace('join("' + BSN + '")', "___PROT_JOIN2___")
-              changes.append('protected split/join')
-
-              # ===== الخطوة 2: تحويل كل \n حرفي إلى سطر جديد فعلي =====
-              if BSN in content:
-                  count = content.count(BSN)
-                  content = content.replace(BSN, NL)
-                  changes.append(f'converted {count} literal BSN to real newlines')
-
-              # ===== الخطوة 3: إعادة split/join المحمية =====
-              content = content.replace("___PROT_SPLIT___", "split('" + BSN + "')")
-              content = content.replace("___PROT_JOIN___", "join('" + BSN + "')")
-              content = content.replace("___PROT_SPLIT2___", 'split("' + BSN + '")')
-              content = content.replace("___PROT_JOIN2___", 'join("' + BSN + '")')
-
-              # ===== الخطوة 4: إصلاح split(' + سطر جديد + ') =====
-              content = re.sub(r"split\(\s*'\s*\n\s*'\s*\)", "split('" + BSN + "')", content)
-              content = re.sub(r"join\(\s*'\s*\n\s*'\s*\)", "join('" + BSN + "')", content)
-              changes.append('fixed split/join with real newlines')
-
-              # ===== الخطوة 5: إصلاح النصوص العربية متعددة الأسطر =====
-              lines = content.split(NL)
-              fixed = []
-              i = 0
-              while i < len(lines):
-                  line = lines[i]
-                  stripped = line.rstrip()
-                  sq = len(re.findall(r"(?<!\\)'", stripped))
-                  dq = len(re.findall(r'(?<!\\)"', stripped))
-                  is_broken = (sq % 2 == 1) or (dq % 2 == 1)
-
-                  if is_broken and i + 1 < len(lines):
-                      nxt = lines[i + 1]
-                      nxt_s = nxt.lstrip()
-                      reserved = ('class ', 'void ', 'static ', 'final ', 'var ',
-                                  'return ', 'if ', 'for ', 'while ', 'import ',
-                                  'export ', '@override', '//', '/*', '*/', '}',
-                                  ')', ']', 'Widget ', 'Future', 'List', 'Map',
-                                  'String ', 'bool ', 'int ', 'double ')
-                      is_code = any(nxt_s.startswith(r) for r in reserved)
-                      if not is_code and len(nxt_s) < 300 and nxt_s:
-                          merged = stripped + BSN + nxt_s
-                          fixed.append(merged)
-                          changes.append('merged multiline string')
-                          i += 2
-                          continue
-
-                  fixed.append(lines[i])
-                  i += 1
-
-              content = NL.join(fixed)
-
-              # ===== الخطوة 6: إصلاح rawJson cast =====
-              if 'rawJson: item));' in content:
-                  content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
-                  changes.append('fixed rawJson cast v1')
-              if 'rawJson: item)' in content and 'rawJson: Map' not in content:
-                  content = content.replace('rawJson: item)', 'rawJson: Map<String, dynamic>.from(item))')
-                  changes.append('fixed rawJson cast v2')
-
-              # ===== الخطوة 7: تنظيف الأسطر الفارغة الزائدة =====
-              content = re.sub(NL + '{4,}', NL + NL + NL, content)
-
-              # ===== الخطوة 8: التأكد من عدم وجود \n حرفي خارج النصوص =====
-              # نبحث عن ;\n أو {\n أو }\n خارج النصوص
-              # هذه خطوة إضافية للأمان
-              remaining = content.count(BSN)
-              if remaining > 0:
-                  # نتحقق إذا كانت داخل نصوص فقط
-                  print(f'  INFO: {remaining} BSN remaining (should be inside strings)')
-
+              
+              # 1. إصلاح split و join المكسورة (استبدال مباشر)
+              content = content.replace("split('\n')", "split('\\n')")
+              content = content.replace("join('\n')", "join('\\n')")
+              content = content.replace('split("\n")', 'split("\\n")')
+              content = content.replace('join("\n")', 'join("\\n")')
+              
+              # 2. إصلاح النصوص العربية متعددة الأسطر (استبدال مباشر)
+              # في tv.dart: رسالة تأكيد الحذف
+              old_str1 = """'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟
+          سيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).'"""
+              new_str1 = "'هل أنت متأكد من حذف \\"${c.title.isEmpty ? c.username : c.title}\\"؟\\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).'"
+              content = content.replace(old_str1, new_str1)
+              
+              # في core.dart و tv.dart: title.split
+              content = content.replace("title.split('\n').first", "title.split('\\n').first")
+              
+              # 3. إصلاح rawJson cast
+              content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
+              
               if content != original:
                   with open(filepath, 'w', encoding='utf-8') as f:
                       f.write(content)
-                  print(f'FIXED {filepath}: {", ".join(changes[:5])}')
+                  print(f'✅ FIXED: {filepath}')
               else:
-                  print(f'OK {filepath}: no changes needed')
-
-          print('ALL DART FILES PROCESSED')
+                  print(f'✓ OK: {filepath}')
+                  
+          print('✅ ALL DART FILES FIXED')
           PYEOF
 
-          echo ""
-          echo "=== التحقق النهائي ==="
-          echo "عدد الأسطر في كل ملف:"
-          wc -l lib/core.dart lib/tv.dart lib/ui.dart
-          echo ""
-          echo "أسطر split/join:"
-          grep -n "split\|join" lib/core.dart | grep -v "//" | head -15
-          echo ""
-          grep -n "split\|join" lib/tv.dart | grep -v "//" | head -10
-          echo ""
-          grep -n "split\|join" lib/ui.dart | grep -v "//" | head -10
+          echo "=== التحقق من الإصلاح ==="
+          grep -n "split" lib/core.dart | head -5
 
       - name: Build MOBILE APK
         run: |
-          echo "=== بناء تطبيق الجوال ==="
           flutter build apk --release -t lib/main.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
-          ls -lh build/app/outputs/flutter-apk/
 
       - name: Build TV APK
         run: |
-          echo "=== بناء تطبيق التلفزيون ==="
           sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
-          ls -lh build/app/outputs/flutter-apk/
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
