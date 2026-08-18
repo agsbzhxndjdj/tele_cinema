@@ -30,182 +30,265 @@ jobs:
 
       - name: Inject keystore + google-services
         run: |
-          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
-          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
-          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
+          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; fi
+          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; fi
+          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; fi
 
-      # ✅✅✅ تعديل Gradle بطريقة مضمونة 100% (سطر بسطر) ✅✅✅
-      - name: Patch gradle (Foolproof Method)
+      - name: Patch gradle (SDK 35 + Signing)
         run: |
-          python3 - << 'PYEOF'
-          import re
-          
-          # 1) settings.gradle
+          python3 << 'PYEOF'
+          import os
+          NL = chr(10)
+          # settings.gradle
           p = 'android/settings.gradle'
-          with open(p, 'r') as f: s = f.read()
-          if 'google-services' not in s:
-              m = re.search(r'plugins\s*\{[^}]*\}', s)
-              if m:
-                  old = m.group(0)
-                  new = old[:-1] + '\n    id "com.google.gms.google-services" version "4.4.0" apply false\n}'
-                  s = s.replace(old, new)
-                  with open(p, 'w') as f: f.write(s)
-                  print('✅ settings.gradle patched')
-
-          # 2) app/build.gradle (طريقة قراءة الأسطر المضمونة)
+          if os.path.exists(p):
+              s = open(p).read()
+              if 'google-services' not in s:
+                  a = s.find('plugins')
+                  if a >= 0:
+                      b = s.find('{', a)
+                      c = s.find('}', b)
+                      s = s[:c] + NL + '    id "com.google.gms.google-services" version "4.4.0" apply false' + NL + s[c:]
+                      open(p, 'w').write(s)
+          # app/build.gradle
           p = 'android/app/build.gradle'
-          with open(p, 'r') as f: lines = f.readlines()
-          
-          new_lines = []
-          has_signing = False
-          
-          for line in lines:
-              # تعديل إصدارات SDK مباشرة
-              if 'compileSdk' in line and 'compileSdkVersion' not in line:
-                  new_lines.append('    compileSdk = 35\n')
-              elif 'targetSdk' in line and 'targetSdkVersion' not in line:
-                  new_lines.append('    targetSdk = 35\n')
-              elif 'minSdk' in line and 'minSdkVersion' not in line:
-                  new_lines.append('    minSdk = 21\n')
-              else:
-                  new_lines.append(line)
-                  
-              if 'signingConfigs' in line: has_signing = True
-          
-          s = "".join(new_lines)
-          
-          # إضافة google-services
-          if 'com.google.gms.google-services' not in s:
-              m = re.search(r'plugins\s*\{[^}]*\}', s)
-              if m:
-                  old = m.group(0)
-                  new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
-                  s = s.replace(old, new)
-                  
-          # إضافة Signing
-          if not has_signing:
-              sig = """    signingConfigs {
-                  release {
-                      storeFile file('telecinema.keystore')
-                      storePassword '12345678'
-                      keyAlias 'telecinema'
-                      keyPassword '12345678'
-                  }
-              }\n"""
-              s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
-              
-          s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-          
-          with open(p, 'w') as f: f.write(s)
-          print('✅ app/build.gradle patched (SDK 35 + Signing)')
+          if os.path.exists(p):
+              s = open(p).read()
+              if 'com.google.gms.google-services' not in s:
+                  a = s.find('plugins')
+                  if a >= 0:
+                      b = s.find('{', a)
+                      c = s.find('}', b)
+                      s = s[:c] + NL + '    id "com.google.gms.google-services"' + NL + s[c:]
+              sig = '    signingConfigs {' + NL
+              sig += '        release {' + NL
+              sig += "            storeFile file('telecinema.keystore')" + NL
+              sig += "            storePassword '12345678'" + NL
+              sig += "            keyAlias 'telecinema'" + NL
+              sig += "            keyPassword '12345678'" + NL
+              sig += '        }' + NL + '    }' + NL
+              if 'signingConfigs' not in s:
+                  s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
+              s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
+              out = []
+              for line in s.split(NL):
+                  if 'compileSdk' in line and 'compileSdkVersion' not in line:
+                      out.append('    compileSdk = 35')
+                  elif 'targetSdk' in line and 'targetSdkVersion' not in line:
+                      out.append('    targetSdk = 35')
+                  elif 'minSdk' in line and 'minSdkVersion' not in line:
+                      out.append('    minSdk = 21')
+                  else:
+                      out.append(line)
+              open(p, 'w').write(NL.join(out))
+              print('gradle patched')
           PYEOF
-
-          echo "=== التحقق من compileSdk ==="
-          grep -n "compileSdk" android/app/build.gradle
+          grep -n "compileSdk" android/app/build.gradle || true
 
       - name: Patch AndroidManifest
         run: |
-          sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' android/app/src/main/AndroidManifest.xml
-          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="[^"]*"/android:label="تلي سينما"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' android/app/src/main/AndroidManifest.xml
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' android/app/src/main/AndroidManifest.xml
+          F=android/app/src/main/AndroidManifest.xml
+          if [ -f "$F" ]; then
+            if ! grep -q leanback "$F"; then
+              sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' "$F"
+            fi
+            if ! grep -q usesCleartextTraffic "$F"; then
+              sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$F"
+            fi
+            sed -i 's|android:label="[^"]*"|android:label="تلي سينما"|' "$F"
+            if ! grep -q LEANBACK_LAUNCHER "$F"; then
+              sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' "$F"
+            fi
+            if ! grep -q POST_NOTIFICATIONS "$F"; then
+              sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' "$F"
+            fi
+          fi
 
       - name: Patch MainActivity
         run: |
-          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
-          PKG=$(head -n 1 "$MAIN_ACT")
-          {
-            echo "$PKG"
-            echo ''
-            echo 'import android.content.pm.PackageManager'
-            echo 'import io.flutter.embedding.android.FlutterActivity'
-            echo 'import io.flutter.embedding.engine.FlutterEngine'
-            echo 'import io.flutter.plugin.common.MethodChannel'
-            echo ''
-            echo 'class MainActivity : FlutterActivity() {'
-            echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
-            echo '        super.configureFlutterEngine(flutterEngine)'
-            echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
-            echo '            .setMethodCallHandler { call, result ->'
-            echo '                if (call.method == "isTv") {'
-            echo '                    val pm = packageManager'
-            echo '                    result.success('
-            echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
-            echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
-            echo '                    )'
-            echo '                } else if (call.method == "openExternal") {'
-            echo '                    val url = call.argument<String>("url")'
-            echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
-            echo '                    val uri = android.net.Uri.parse(url)'
-            echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
-            echo '                    intent.setDataAndType(uri, "video/*")'
-            echo '                    try {'
-            echo '                        startActivity(android.content.Intent.createChooser(intent, "تشغيل بواسطة"))'
-            echo '                        result.success(true)'
-            echo '                    } catch (e: Exception) {'
-            echo '                        result.success(false)'
-            echo '                    }'
-            echo '                } else {'
-            echo '                    result.notImplemented()'
-            echo '                }'
-            echo '            }'
-            echo '    }'
-            echo '}'
-          } > "$MAIN_ACT"
+          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" 2>/dev/null | head -n 1)
+          if [ -n "$MAIN_ACT" ]; then
+            PKG=$(head -n 1 "$MAIN_ACT")
+            {
+              echo "$PKG"
+              echo ''
+              echo 'import android.content.pm.PackageManager'
+              echo 'import io.flutter.embedding.android.FlutterActivity'
+              echo 'import io.flutter.embedding.engine.FlutterEngine'
+              echo 'import io.flutter.plugin.common.MethodChannel'
+              echo ''
+              echo 'class MainActivity : FlutterActivity() {'
+              echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
+              echo '        super.configureFlutterEngine(flutterEngine)'
+              echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
+              echo '            .setMethodCallHandler { call, result ->'
+              echo '                if (call.method == "isTv") {'
+              echo '                    val pm = packageManager'
+              echo '                    result.success('
+              echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
+              echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
+              echo '                    )'
+              echo '                } else if (call.method == "openExternal") {'
+              echo '                    val url = call.argument<String>("url")'
+              echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
+              echo '                    val uri = android.net.Uri.parse(url)'
+              echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
+              echo '                    intent.setDataAndType(uri, "video/*")'
+              echo '                    try {'
+              echo '                        startActivity(android.content.Intent.createChooser(intent, "Play with"))'
+              echo '                        result.success(true)'
+              echo '                    } catch (e: Exception) {'
+              echo '                        result.success(false)'
+              echo '                    }'
+              echo '                } else {'
+              echo '                    result.notImplemented()'
+              echo '                }'
+              echo '            }'
+              echo '    }'
+              echo '}'
+            } > "$MAIN_ACT"
+          fi
 
       - name: Prepare (pub get + icons)
         run: |
           flutter pub get
-          flutter pub run flutter_launcher_icons:main
+          flutter pub run flutter_launcher_icons:main || true
 
-      # ✅✅✅ إصلاح شامل ومضمون لملفات Dart (طريقة الاستبدال المباشر) ✅✅✅
-      - name: Fix broken string literals in Dart files
+      # =====================================================
+      # ✅✅✅ إصلاح مضمون 100% لملفات Dart - باستخدام chr() ✅✅✅
+      # =====================================================
+      - name: Fix Dart files (Bulletproof Method)
         run: |
           python3 << 'PYEOF'
           import os
-
+          import re
+          
+          NL = chr(10)     # سطر جديد فعلي
+          BSN = chr(92) + 'n'  # \n الصحيح
+          
           files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
-
-          for filepath in files:
-              if not os.path.exists(filepath):
+          
+          for fp in files:
+              if not os.path.exists(fp):
+                  print('SKIP ' + fp)
                   continue
-                  
-              with open(filepath, 'r', encoding='utf-8') as f:
+              
+              with open(fp, 'r', encoding='utf-8') as f:
                   content = f.read()
+              
+              orig = content
+              
+              # === الخطوة 1: حماية \n الصحيح داخل split/join ===
+              PROT_S = '___PROTECTED_SPLIT_NL___'
+              PROT_J = '___PROTECTED_JOIN_NL___'
+              content = content.replace("split('" + BSN + "')", PROT_S)
+              content = content.replace("join('" + BSN + "')", PROT_J)
+              
+              # === الخطوة 2: تحويل كل \n حرفي (backslash+n) إلى سطر جديد فعلي ===
+              if BSN in content:
+                  content = content.replace(BSN, NL)
+              
+              # === الخطوة 3: استعادة split/join المحمية ===
+              content = content.replace(PROT_S, "split('" + BSN + "')")
+              content = content.replace(PROT_J, "join('" + BSN + "')")
+              
+              # === الخطوة 4: إصلاح split(' + سطر جديد + ') => split('\n') ===
+              # النمط: split( ثم ' ثم سطر جديد ثم ' ثم )
+              pattern1 = "split('" + NL + "')"
+              replacement1 = "split('" + BSN + "')"
+              while pattern1 in content:
+                  content = content.replace(pattern1, replacement1)
+              
+              pattern2 = "join('" + NL + "')"
+              replacement2 = "join('" + BSN + "')"
+              while pattern2 in content:
+                  content = content.replace(pattern2, replacement2)
+              
+              # === الخطوة 5: إصلاح النصوص العربية متعددة الأسطر ===
+              # نبحث عن: ؟ + سطر جديد + سيتم
+              content = content.replace('؟' + NL + 'سيتم', '؟' + BSN + 'سيتم')
+              
+              # === الخطوة 6: إصلاح النصوص متعددة الأسطر بشكل عام ===
+              lines = content.split(NL)
+              fixed = []
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  stripped = line.rstrip()
                   
-              original = content
+                  # عدّ علامات التنصيص الفردية
+                  sq = 0
+                  for idx, ch in enumerate(stripped):
+                      if ch == "'" and (idx == 0 or stripped[idx-1] != chr(92)):
+                          sq += 1
+                  
+                  # إذا عدد فردي، النص مكسور
+                  if sq % 2 == 1 and i + 1 < len(lines):
+                      nxt = lines[i + 1]
+                      nxt_s = nxt.lstrip()
+                      
+                      # لا تدمج إذا كان السطر التالي كود جديد
+                      reserved = ('class ', 'void ', 'static ', 'final ', 'var ',
+                                  'return ', 'if ', 'for ', 'while ', 'import ',
+                                  '@override', '//', '/*', '}', 'Widget ', 'Future',
+                                  'List', 'Map', 'String ', 'bool ', 'int ', 'double ',
+                                  'IconButton', 'Text(', 'Padding(', 'Container(',
+                                  'Column(', 'Row(', 'SizedBox(', 'Expanded(')
+                      is_code = False
+                      for r in reserved:
+                          if nxt_s.startswith(r):
+                              is_code = True
+                              break
+                      
+                      if not is_code and len(nxt_s) < 300 and nxt_s:
+                          # ادمج السطرين مع \n
+                          merged = stripped + BSN + nxt_s
+                          fixed.append(merged)
+                          i += 2
+                          continue
+                  
+                  fixed.append(line)
+                  i += 1
               
-              # 1. إصلاح split و join المكسورة (استبدال سطر جديد فعلي بـ \n صحيح)
-              content = content.replace("split('\n')", "split('\\n')")
-              content = content.replace('split("\n")', 'split("\\n")')
-              content = content.replace("join('\n')", "join('\\n')")
-              content = content.replace('join("\n")', 'join("\\n")')
+              content = NL.join(fixed)
               
-              # 2. إصلاح النص العربي متعدد الأسطر في tv.dart (استبدال السطر الجديد الفعلي بـ \n)
-              content = content.replace('؟\nسيتم حذف', '؟\\nسيتم حذف')
-              
-              # 3. إصلاح مشكلة rawJson cast في core.dart
+              # === الخطوة 7: إصلاح rawJson cast ===
               content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
               content = content.replace('rawJson: item)', 'rawJson: Map<String, dynamic>.from(item))')
-
-              if content != original:
-                  with open(filepath, 'w', encoding='utf-8') as f:
+              
+              # === الخطوة 8: تنظيف ===
+              while NL + NL + NL + NL in content:
+                  content = content.replace(NL + NL + NL + NL, NL + NL + NL)
+              
+              if content != orig:
+                  with open(fp, 'w', encoding='utf-8') as f:
                       f.write(content)
-                  print(f'✅ FIXED: {filepath}')
+                  print('FIXED ' + fp)
               else:
-                  print(f'✓ OK: {filepath}')
-                  
-          print('✅ ALL DART FILES FIXED')
+                  print('OK ' + fp)
+          
+          print('DONE')
           PYEOF
+          echo "=== Verification ==="
+          echo "split patterns:"
+          grep -n "split(" lib/core.dart lib/tv.dart lib/ui.dart | head -20 || true
+          echo ""
+          echo "Line counts:"
+          wc -l lib/core.dart lib/tv.dart lib/ui.dart
+
       - name: Build MOBILE APK
         run: |
+          echo "=== Building Mobile APK ==="
           flutter build apk --release -t lib/main.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
 
       - name: Build TV APK
         run: |
-          sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
+          echo "=== Building TV APK ==="
+          F=android/app/src/main/AndroidManifest.xml
+          if [ -f "$F" ]; then
+            sed -i 's|android:label="[^"]*"|android:label="تلي سينما TV"|' "$F"
+          fi
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
 
