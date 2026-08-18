@@ -223,7 +223,7 @@ class Tg {
         }
       }
       movies.add(_build(user, mid, caption, date, (item['duration'] ?? '').toString(), (item['size'] ?? '').toString(),
-          alts: alts, serverQuality: (item['quality'] ?? '').toString(), rawJson: _safeMap(item)));
+          alts: alts, serverQuality: (item['quality'] ?? '').toString(), rawJson: Map<String, dynamic>.from(item)));
     }
     return Page(movies, next, title, avatar);
   }
