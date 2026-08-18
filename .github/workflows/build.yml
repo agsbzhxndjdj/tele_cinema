@@ -30,127 +30,78 @@ jobs:
 
       - name: Inject keystore + google-services
         run: |
-          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
-          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
-          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
-          ls -la android/app/ | head -20
+          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; fi
+          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; fi
+          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; fi
 
-      - name: Patch gradle (SDK 35 + Signing)
+      - name: Patch gradle (SDK 35)
         run: |
-          python3 << 'PYEOF'
-          NL = chr(10)
-          # settings.gradle
-          p = 'android/settings.gradle'
-          s = open(p).read()
-          if 'google-services' not in s:
-              a = s.find('plugins')
-              if a != -1:
-                  b = s.find('{', a)
-                  c = s.find('}', b)
-                  s = s[:c] + NL + '    id "com.google.gms.google-services" version "4.4.0" apply false' + NL + s[c:]
-                  open(p, 'w').write(s)
-                  print('settings.gradle patched')
-          # build.gradle
-          p = 'android/app/build.gradle'
-          s = open(p).read()
-          if 'com.google.gms.google-services' not in s:
-              a = s.find('plugins')
-              if a != -1:
-                  b = s.find('{', a)
-                  c = s.find('}', b)
-                  s = s[:c] + NL + '    id "com.google.gms.google-services"' + NL + s[c:]
-          sig = '    signingConfigs {' + NL
-          sig += '        release {' + NL
-          sig += "            storeFile file('telecinema.keystore')" + NL
-          sig += "            storePassword '12345678'" + NL
-          sig += "            keyAlias 'telecinema'" + NL
-          sig += "            keyPassword '12345678'" + NL
-          sig += '        }' + NL + '    }' + NL
-          if 'signingConfigs' not in s:
-              s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
-          s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-          out = []
-          for line in s.split(NL):
-              if 'compileSdk' in line and 'compileSdkVersion' not in line:
-                  out.append('    compileSdk = 35')
-              elif 'targetSdk' in line and 'targetSdkVersion' not in line:
-                  out.append('    targetSdk = 35')
-              elif 'minSdk' in line and 'minSdkVersion' not in line:
-                  out.append('    minSdk = 21')
-              else:
-                  out.append(line)
-          s = NL.join(out)
-          open(p, 'w').write(s)
-          print('build.gradle patched (SDK 35)')
-          PYEOF
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' android/app/build.gradle
+          sed -i 's/compileSdk = [0-9]*/compileSdk = 35/' android/app/build.gradle
+          sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 35/' android/app/build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/' android/app/build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/' android/app/build.gradle
+          sed -i 's/targetSdk = [0-9]*/targetSdk = 35/' android/app/build.gradle
+          sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 35/' android/app/build.gradle
           echo "=== compileSdk check ==="
-          grep -n "compileSdk" android/app/build.gradle
+          grep -n "compileSdk\|targetSdk" android/app/build.gradle
 
       - name: Patch AndroidManifest
         run: |
           F=android/app/src/main/AndroidManifest.xml
           if [ -f "$F" ]; then
-            if ! grep -q leanback "$F"; then
-              sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' "$F"
-            fi
-            if ! grep -q usesCleartextTraffic "$F"; then
-              sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$F"
-            fi
+            sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' "$F"
+            sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$F"
             sed -i 's|android:label="[^"]*"|android:label="تلي سينما"|' "$F"
-            if ! grep -q LEANBACK_LAUNCHER "$F"; then
-              sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' "$F"
-            fi
-            if ! grep -q POST_NOTIFICATIONS "$F"; then
-              sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' "$F"
-            fi
+            sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' "$F"
+            sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' "$F"
           fi
 
       - name: Patch MainActivity
         run: |
-          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" 2>/dev/null | head -n 1)
-          if [ -n "$MAIN_ACT" ]; then
-            PKG=$(head -n 1 "$MAIN_ACT")
-            {
-              echo "$PKG"
-              echo ''
-              echo 'import android.content.pm.PackageManager'
-              echo 'import io.flutter.embedding.android.FlutterActivity'
-              echo 'import io.flutter.embedding.engine.FlutterEngine'
-              echo 'import io.flutter.plugin.common.MethodChannel'
-              echo ''
-              echo 'class MainActivity : FlutterActivity() {'
-              echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
-              echo '        super.configureFlutterEngine(flutterEngine)'
-              echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
-              echo '            .setMethodCallHandler { call, result ->'
-              echo '                if (call.method == "isTv") {'
-              echo '                    val pm = packageManager'
-              echo '                    result.success('
-              echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
-              echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
-              echo '                    )'
-              echo '                } else if (call.method == "openExternal") {'
-              echo '                    val url = call.argument<String>("url")'
-              echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
-              echo '                    val uri = android.net.Uri.parse(url)'
-              echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
-              echo '                    intent.setDataAndType(uri, "video/*")'
-              echo '                    try {'
-              echo '                        startActivity(android.content.Intent.createChooser(intent, "Play"))'
-              echo '                        result.success(true)'
-              echo '                    } catch (e: Exception) {'
-              echo '                        result.success(false)'
-              echo '                    }'
-              echo '                } else {'
-              echo '                    result.notImplemented()'
-              echo '                }'
-              echo '            }'
-              echo '    }'
-              echo '}'
-            } > "$MAIN_ACT"
-          fi
+          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
+          PKG=$(head -n 1 "$MAIN_ACT")
+          {
+            echo "$PKG"
+            echo ''
+            echo 'import android.content.pm.PackageManager'
+            echo 'import io.flutter.embedding.android.FlutterActivity'
+            echo 'import io.flutter.embedding.engine.FlutterEngine'
+            echo 'import io.flutter.plugin.common.MethodChannel'
+            echo ''
+            echo 'class MainActivity : FlutterActivity() {'
+            echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
+            echo '        super.configureFlutterEngine(flutterEngine)'
+            echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
+            echo '            .setMethodCallHandler { call, result ->'
+            echo '                if (call.method == "isTv") {'
+            echo '                    val pm = packageManager'
+            echo '                    result.success('
+            echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
+            echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
+            echo '                    )'
+            echo '                } else if (call.method == "openExternal") {'
+            echo '                    val url = call.argument<String>("url")'
+            echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
+            echo '                    val uri = android.net.Uri.parse(url)'
+            echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
+            echo '                    intent.setDataAndType(uri, "video/*")'
+            echo '                    try {'
+            echo '                        startActivity(android.content.Intent.createChooser(intent, "Play"))'
+            echo '                        result.success(true)'
+            echo '                    } catch (e: Exception) {'
+            echo '                        result.success(false)'
+            echo '                    }'
+            echo '                } else {'
+            echo '                    result.notImplemented()'
+            echo '                }'
+            echo '            }'
+            echo '    }'
+            echo '}'
+          } > "$MAIN_ACT"
 
-      - name: Prepare (pub get + icons)
+      - name: Prepare
         run: |
           flutter pub get
           flutter pub run flutter_launcher_icons:main || true
@@ -162,7 +113,7 @@ jobs:
 
       - name: Build TV APK
         run: |
-          sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="[^"]*"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
 
