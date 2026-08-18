@@ -175,6 +175,101 @@ jobs:
           flutter pub get
           flutter pub run flutter_launcher_icons:main
 
+      # ✅✅✅ خطوة جديدة: إصلاح الأسطر المكسورة (\n) في ملفات Dart ✅✅✅
+      - name: Fix broken string literals in Dart files
+        run: |
+          python3 << 'PYEOF'
+          import os
+          import re
+
+          files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
+
+          for filepath in files:
+              if not os.path.exists(filepath):
+                  print(f'⚠️ {filepath} غير موجود - تخطي')
+                  continue
+
+              with open(filepath, 'r', encoding='utf-8') as f:
+                  lines = f.readlines()
+
+              fixed_lines = []
+              i = 0
+              fixes = 0
+
+              while i < len(lines):
+                  line = lines[i]
+                  stripped = line.rstrip('\n').rstrip('\r')
+
+                  # عدد علامات التنصيص الفردية (غير escaped)
+                  single_quotes = len(re.findall(r"(?<!\\)'", stripped))
+                  double_quotes = len(re.findall(r'(?<!\\)"', stripped))
+
+                  # إذا كان السطر يحتوي على عدد فردي من علامات تنصيص، قد يكون مكسور
+                  is_broken = (single_quotes % 2 == 1) or (double_quotes % 2 == 1)
+
+                  if is_broken and i + 1 < len(lines):
+                      # تحقق أن السطر التالي يبدو مكملاً (ليس class/def/void/etc)
+                      next_line = lines[i + 1]
+                      next_stripped = next_line.lstrip()
+
+                      # إذا السطر التالي يبدأ بكلمة محجوزة، لا تدمج
+                      reserved_start = ('class ', 'def ', 'void ', 'static ', 'final ', 'var ',
+                                       'return ', 'if ', 'for ', 'while ', 'import ', 'export ',
+                                       '@override', '//', '/*', '*')
+                      is_continuation = not any(next_stripped.startswith(r) for r in reserved_start)
+
+                      if is_continuation and len(next_stripped) < 200:
+                          merged = stripped + '\\n' + next_stripped
+                          fixed_lines.append(merged)
+                          fixes += 1
+                          i += 2
+                          continue
+
+                  fixed_lines.append(line)
+                  i += 1
+
+              if fixes > 0:
+                  with open(filepath, 'w', encoding='utf-8') as f:
+                      f.writelines(fixed_lines)
+                  print(f'✅ Fixed {fixes} broken strings in {filepath}')
+              else:
+                  print(f'✓ No broken strings in {filepath}')
+
+          # ✅ إصلاح خاص لـ rawJson cast في core.dart
+          core_path = 'lib/core.dart'
+          if os.path.exists(core_path):
+              with open(core_path, 'r', encoding='utf-8') as f:
+                  content = f.read()
+
+              modified = False
+              if 'rawJson: item));' in content:
+                  content = content.replace(
+                      'rawJson: item));',
+                      'rawJson: Map<String, dynamic>.from(item)));'
+                  )
+                  modified = True
+                  print('✅ Fixed rawJson cast (item)')
+
+              if 'rawJson: item)' in content and 'rawJson: Map' not in content:
+                  content = content.replace(
+                      'rawJson: item)',
+                      'rawJson: Map<String, dynamic>.from(item))'
+                  )
+                  modified = True
+                  print('✅ Fixed rawJson cast (item - variant 2)')
+
+              if modified:
+                  with open(core_path, 'w', encoding='utf-8') as f:
+                      f.write(content)
+
+          print('✅ String literal fix complete')
+          PYEOF
+
+          echo "=== التحقق من الإصلاحات ==="
+          echo "ملفات تحتوي على \\n الصحيح:"
+          grep -l "split('\\\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد split('\\n')"
+          grep -l "join('\\\\n')" lib/*.dart 2>/dev/null || echo "لا يوجد join('\\n')"
+
       - name: Build MOBILE APK
         run: |
           echo "=== بناء تطبيق الجوال ==="
