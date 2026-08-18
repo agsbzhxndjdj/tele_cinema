@@ -918,7 +918,7 @@ class _ManageChannelsScreenState extends State<ManageChannelsScreen> {
         backgroundColor: const Color(0xFF151B23),
         title: const Text('حذف القناة', style: TextStyle(color: Colors.white)),
         content: Text(
-          'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).', // ✅ تم إصلاح السطر المكسور
+          'هل أنت متأكد من حذف "${c.title.isEmpty ? c.username : c.title}"؟\nسيتم حذف جميع الأفلام المرتبطة بها (${Store.moviesOf(c.username).length} فيلم).'
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
