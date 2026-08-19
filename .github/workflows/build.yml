@@ -39,6 +39,14 @@ jobs:
           echo "=== الملفات الموجودة في lib ==="
           ls -la lib/
           echo ""
+          echo "=== محتوى lib/app_tv.dart (أول 10 أسطر) ==="
+          if [ -f lib/app_tv.dart ]; then
+            head -10 lib/app_tv.dart
+          else
+            echo "⚠️  الملف lib/app_tv.dart غير موجود!"
+            exit 1
+          fi
+          echo ""
           echo "=== محتوى lib/main.dart (أول 10 أسطر) ==="
           head -10 lib/main.dart
 
@@ -46,7 +54,7 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           import re
-          NL = chr(10)
+
           # 1) settings.gradle
           p = 'android/settings.gradle'
           s = open(p).read()
@@ -54,145 +62,162 @@ jobs:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
-                  new = old[:-1] + NL + '    id "com.google.gms.google-services" version "4.4.0" apply false' + NL + '}'
+                  new = old[:-1] + '\n    id "com.google.gms.google-services" version "4.4.0" apply false\n}'
                   s = s.replace(old, new)
                   open(p, 'w').write(s)
                   print('settings.gradle patched')
+
           # 2) app/build.gradle
           p = 'android/app/build.gradle'
           s = open(p).read()
+
+          # إضافة google-services
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
-                  new = old[:-1] + NL + '    id "com.google.gms.google-services"' + NL + '}'
+                  new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
                   s = s.replace(old, new)
-          sig = '    signingConfigs {' + NL
-          sig += '        release {' + NL
-          sig += "            storeFile file('telecinema.keystore')" + NL
-          sig += "            storePassword '12345678'" + NL
-          sig += "            keyAlias 'telecinema'" + NL
-          sig += "            keyPassword '12345678'" + NL
-          sig += '        }' + NL
-          sig += '    }' + NL
+
+          # إضافة signingConfigs
+          sig = """    signingConfigs {
+              release {
+                  storeFile file('telecinema.keystore')
+                  storePassword '12345678'
+                  keyAlias 'telecinema'
+                  keyPassword '12345678'
+              }
+          }
+          """
           if 'signingConfigs' not in s:
-              s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
+              s = s.replace('    buildTypes {', sig + '\n    buildTypes {', 1)
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-          out = []
-          for line in s.split(NL):
-              if 'compileSdk' in line and 'compileSdkVersion' not in line:
-                  out.append('    compileSdk = 35')
-              elif 'targetSdk' in line and 'targetSdkVersion' not in line:
-                  out.append('    targetSdk = 35')
-              elif 'minSdk' in line and 'minSdkVersion' not in line:
-                  out.append('    minSdk = 21')
-              else:
-                  out.append(line)
-          s = NL.join(out)
+
+          # تعديل compileSdk إلى 35
+          s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
+          s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
+          s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
+          if 'compileSdk' not in s:
+              s = re.sub(r'android\s*\{', 'android {\n    compileSdk = 35', s, count=1)
+
+          # أيضاً targetSdk
+          s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
+          s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
+          s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
+
           open(p, 'w').write(s)
-          print('gradle patched (SDK 35 + signing)')
+          print('✅ gradle patched (google-services + signing + compileSdk 35)')
           PYEOF
+
           echo "=== سطور compileSdk في build.gradle ==="
           grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
 
-      - name: Patch AndroidManifest (HTTP + الاسم + Android TV + الإشعارات)
+      - name: Patch AndroidManifest (HTTP + الاسم + Android TV + الإشعارات + التخزين)
         run: |
-          python3 - << 'PYEOF'
-          import re
-          NL = chr(10)
-          p = 'android/app/src/main/AndroidManifest.xml'
-          s = open(p, encoding='utf-8').read()
-          if 'leanback' not in s:
-              s = s.replace('<application', '<uses-feature android:name="android.software.leanback" android:required="false" />' + NL + '    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />' + NL + '    <application', 1)
-          if 'usesCleartextTraffic' not in s:
-              s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
-          s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
-          if 'LEANBACK_LAUNCHER' not in s:
-              s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>', '<category android:name="android.intent.category.LAUNCHER"/>' + NL + '                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>', 1)
-          if 'POST_NOTIFICATIONS' not in s:
-              s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>', '<uses-permission android:name="android.permission.INTERNET"/>' + NL + '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>', 1)
-          open(p, 'w', encoding='utf-8').write(s)
-          print('manifest patched')
-          PYEOF
+          sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="[^"]*"/android:label="تلي سينما"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>|' android/app/src/main/AndroidManifest.xml
+          grep -n "usesCleartextTraffic\|LEANBACK\|POST_NOTIFICATIONS\|EXTERNAL_STORAGE" android/app/src/main/AndroidManifest.xml
 
-      - name: Patch MainActivity (كشف TV + تشغيل خارجي Cast)
+      - name: Patch MainActivity (كشف TV + تشغيل خارجي + تصدير/استيراد النسخ الاحتياطي)
         run: |
           MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
           PKG=$(head -n 1 "$MAIN_ACT")
           {
             echo "$PKG"
-            echo ''
-            echo 'import android.content.pm.PackageManager'
-            echo 'import io.flutter.embedding.android.FlutterActivity'
-            echo 'import io.flutter.embedding.engine.FlutterEngine'
-            echo 'import io.flutter.plugin.common.MethodChannel'
-            echo ''
-            echo 'class MainActivity : FlutterActivity() {'
-            echo '    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {'
-            echo '        super.configureFlutterEngine(flutterEngine)'
-            echo '        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")'
-            echo '            .setMethodCallHandler { call, result ->'
-            echo '                if (call.method == "isTv") {'
-            echo '                    val pm = packageManager'
-            echo '                    result.success('
-            echo '                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||'
-            echo '                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)'
-            echo '                    )'
-            echo '                } else if (call.method == "openExternal") {'
-            echo '                    val url = call.argument<String>("url")'
-            echo '                    if (url == null) { result.success(false); return@setMethodCallHandler }'
-            echo '                    val uri = android.net.Uri.parse(url)'
-            echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
-            echo '                    intent.setDataAndType(uri, "video/*")'
-            echo '                    try {'
-            echo '                        startActivity(android.content.Intent.createChooser(intent, "تشغيل بواسطة"))'
-            echo '                        result.success(true)'
-            echo '                    } catch (e: Exception) {'
-            echo '                        result.success(false)'
-            echo '                    }'
-            echo '                } else {'
-            echo '                    result.notImplemented()'
-            echo '                }'
-            echo '            }'
-            echo '    }'
-            echo '}'
+            cat << 'KTEOF'
+
+            import android.content.pm.PackageManager
+            import io.flutter.embedding.android.FlutterActivity
+            import io.flutter.embedding.engine.FlutterEngine
+            import io.flutter.plugin.common.MethodChannel
+
+            class MainActivity : FlutterActivity() {
+                override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                    super.configureFlutterEngine(flutterEngine)
+                    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
+                        .setMethodCallHandler { call, result ->
+                            when (call.method) {
+                                "isTv" -> {
+                                    val pm = packageManager
+                                    result.success(
+                                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+                                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
+                                    )
+                                }
+                                "openExternal" -> {
+                                    val url = call.argument<String>("url")
+                                    if (url == null) { result.success(false); return@setMethodCallHandler }
+                                    val uri = android.net.Uri.parse(url)
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                                    intent.setDataAndType(uri, "video/*")
+                                    try {
+                                        startActivity(android.content.Intent.createChooser(intent, "تشغيل بواسطة"))
+                                        result.success(true)
+                                    } catch (e: Exception) {
+                                        result.success(false)
+                                    }
+                                }
+                                "saveToDownloads" -> {
+                                    val name = call.argument<String>("name") ?: "telecinema_backup.json"
+                                    val content = call.argument<String>("content") ?: ""
+                                    try {
+                                        if (android.os.Build.VERSION.SDK_INT >= 29) {
+                                            val resolver = contentResolver
+                                            val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                                            resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
+                                            val values = android.content.ContentValues().apply {
+                                                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                                                put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+                                                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                                            }
+                                            val u = resolver.insert(uri, values)
+                                            u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
+                                            result.success(u != null)
+                                        } else {
+                                            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+                                            f.writeText(content)
+                                            result.success(true)
+                                        }
+                                    } catch (e: Exception) {
+                                        result.success(false)
+                                    }
+                                }
+                                "readFromDownloads" -> {
+                                    val name = call.argument<String>("name") ?: "telecinema_backup.json"
+                                    var text: String? = null
+                                    try {
+                                        if (android.os.Build.VERSION.SDK_INT >= 29) {
+                                            val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                                            val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
+                                            cur?.use {
+                                                if (it.moveToFirst()) {
+                                                    val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
+                                                    text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
+                                                }
+                                            }
+                                        } else {
+                                            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+                                            if (f.exists()) text = f.readText()
+                                        }
+                                    } catch (e: Exception) { }
+                                    result.success(text)
+                                }
+                                else -> result.notImplemented()
+                            }
+                        }
+                }
+            }
+            KTEOF
           } > "$MAIN_ACT"
           cat "$MAIN_ACT"
 
       - name: Prepare (pub get + icons)
         run: |
           flutter pub get
-          flutter pub run flutter_launcher_icons:main || true
-
-      - name: Fix broken string literals in Dart files
-        run: |
-          python3 - << 'PYEOF'
-          import os
-          NL = chr(10)
-          BSN = chr(92) + 'n'
-          files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
-          for fp in files:
-              if not os.path.exists(fp):
-                  print('skip ' + fp)
-                  continue
-              content = open(fp, encoding='utf-8').read()
-              original = content
-              content = content.replace("split('" + BSN + "')", '___PS___')
-              content = content.replace("join('" + BSN + "')", '___PJ___')
-              content = content.replace(BSN, NL)
-              content = content.replace('___PS___', "split('" + BSN + "')")
-              content = content.replace('___PJ___', "join('" + BSN + "')")
-              content = content.replace("split('" + NL + "')", "split('" + BSN + "')")
-              content = content.replace("join('" + NL + "')", "join('" + BSN + "')")
-              content = content.replace('؟' + NL + 'سيتم', '؟' + BSN + 'سيتم')
-              content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
-              if content != original:
-                  open(fp, 'w', encoding='utf-8').write(content)
-                  print('FIXED ' + fp)
-              else:
-                  print('OK ' + fp)
-          print('DART FIX DONE')
-          PYEOF
+          flutter pub run flutter_launcher_icons:main || echo "⚠️ launcher icons skipped"
 
       - name: Build MOBILE APK
         run: |
@@ -201,11 +226,18 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
           ls -lh build/app/outputs/flutter-apk/
 
-      # ❌ تم حذف خطوة بناء تطبيق التلفزيون (Build TV APK) نهائياً
+      - name: Build TV APK
+        run: |
+          echo "=== بناء تطبيق التلفزيون ==="
+          sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
+          flutter build apk --release -t lib/app_tv.dart
+          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
+          ls -lh build/app/outputs/flutter-apk/
 
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: tele-cinema-apk
+          name: tele-cinema-apks
           path: |
             build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
+            build/app/outputs/flutter-apk/tele-cinema-TV.apk
