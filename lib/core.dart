@@ -836,287 +836,279 @@ return l;
 }
 }
 /* ============================================================
-   ✅ السلاسل الذكية الشاملة - V3 (تم التعديل)
+   ✅ السلاسل الذكية الشاملة - V4 (مصححة نهائياً)
    ============================================================ */
 
 class SeriesRegistry {
-  static final Map<String, List<Movie>> parts = {};
-  static bool isSeries(String id) => parts.containsKey(id);
-  static List<Movie> partsOf(String id) => parts[id] ?? [];
-  static int count(String id) => parts[id]?.length ?? 0;
+static final Map<String, List<Movie>> parts = {};
+static final Map<String, List<Movie>?> verifiedParts = {};
+static bool isSeries(String id) => parts.containsKey(id);
+static List<Movie> partsOf(String id) => parts[id] ?? [];
+static int count(String id) => parts[id]?.length ?? 0;
 }
 
-/// تنظيف النص: حذف الجودات، السنوات، الرموز، الأرقام الرومانية، تصحيح الأخطاء الإملائية
+/// تنظيف العنوان
 String _cleanTitle(String title) {
-  var t = title.trim().split('\n').first.trim();
-  
-  // حذف الجودات والتنسيقات
-  t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip|الجودة|1080|720|480|360|p)\b', caseSensitive: false), ' ');
-  
-  // حذف السنوات
-  t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
-  
-  // حذف الأرقام الرومانية (II, III, IV...)
-  t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b'), ' ');
-  
-  // حذف "Part" وأرقام الأجزاء
-  t = t.replaceAll(RegExp(r'(?:part|chapter|الجزء|جزء)\s*:?\s*[\w\d]+', caseSensitive: false), ' ');
-  
-  // حذف الرموز الخاصة
-  t = t.replaceAll(RegExp(r'[_|:–\-_\.,!?()\[\]]+'), ' ');
-  
-  // تصحيح الأخطاء الإملائية الشائعة
-  t = t.replaceAll('Avengerslnfinity', 'Avengers Infinity');
-  t = t.replaceAll('Maze RunnerThe', 'Maze Runner The');
-  t = t.replaceAll('Rebel MoonPart', 'Rebel Moon Part');
-  t = t.replaceAll('World Warz', 'World War Z');
-  t = t.replaceAll('Dune Part On', 'Dune Part One');
-  
-  // تحويل "Part Two" → "2", "Part One" → "1"
-  t = t.replaceAll(RegExp(r'\bpart\s+one\b', caseSensitive: false), '1');
-  t = t.replaceAll(RegExp(r'\bpart\s+two\b', caseSensitive: false), '2');
-  t = t.replaceAll(RegExp(r'\bpart\s+three\b', caseSensitive: false), '3');
-  
-  // إزالة الكلمات العامة جداً
-  const generic = {'the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your', 'his', 'her', 'their', 'our', 'as', 'be', 'was', 'were'};
-  final words = t.split(RegExp(r'\s+')).where((w) {
-    final clean = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
-    return clean.length >= 2 && !generic.contains(clean) && !RegExp(r'^\d+$').hasMatch(clean);
-  }).toList();
-  
-  return words.join(' ').toLowerCase();
+var t = title.trim().split('\n').first.trim();
+t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web|dl|bluray|hdrip|hdtv|dvdrip|brrip|1080|720|480|360)\b', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'(الجودة|جودة|مترجم|مدبلج|مسلسل|الحلقة)', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
+t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b'), ' ');
+t = t.replaceAll(RegExp(r'(?:part|chapter|الجزء|جزء)\s*:?\s*[\w\d]+', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'[_|:.\-,!?()\[\]]+'), ' ');
+t = t.replaceAll('Avengerslnfinity', 'Avengers Infinity');
+t = t.replaceAll('Maze RunnerThe', 'Maze Runner The');
+t = t.replaceAll('Rebel MoonPart', 'Rebel Moon Part');
+t = t.replaceAll('World Warz', 'World War Z');
+const generic = {'the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your', 'his', 'her', 'our', 'as', 'be'};
+final words = <String>[];
+for (var w in t.split(RegExp(r'\s+'))) {
+final c = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+if (c.length >= 2 && !generic.contains(c) && !RegExp(r'^\d+$').hasMatch(c)) words.add(c);
+}
+return words.join(' ');
 }
 
-/// استخراج "عائلة الاسم" - عدة مرشحين للجذر
+/// عائلة الاسم - مرشحين للمطابقة
 Set<String> _extractNameFamily(String title) {
-  final family = <String>{};
-  final clean = _cleanTitle(title);
-  if (clean.isEmpty) return family;
-  
-  final words = clean.split(' ');
-  
-  // 1. كل الكلمات معاً
-  family.add(words.join(' '));
-  
-  // 2. أول 2-3 كلمات (الاسم الأساسي)
-  if (words.length >= 2) family.add(words.take(2).join(' '));
-  if (words.length >= 3) family.add(words.take(3).join(' '));
-  
-  // 3. أي كلمات قبل ":" أو بعد "The"
-  final colonIdx = title.indexOf(':');
-  if (colonIdx > 0) {
-    final beforeColon = _cleanTitle(title.substring(0, colonIdx));
-    if (beforeColon.isNotEmpty) family.add(beforeColon);
-  }
-  
-  // 4. الكلمات الأساسية (حذف كلمات مثل "Rise", "War", "Kingdom" من البداية)
-  final prefixes = {'rise', 'war', 'dawn', 'kingdom', 'age', 'fate', 'battle'};
-  final filtered = words.where((w) => !prefixes.contains(w.toLowerCase())).toList();
-  if (filtered.length >= 2 && filtered.length < words.length) {
-    family.add(filtered.join(' '));
-  }
-  
-  // 5. للكلمات المميزة (حذف الكلمات الشائعة جداً مثل "the", "of")
-  final distinctive = words.where((w) => !{'the', 'of', 'and', 'for'}.contains(w.toLowerCase())).toList();
-  if (distinctive.length >= 2) family.add(distinctive.join(' '));
-  
-  return family;
+final family = <String>{};
+final clean = _cleanTitle(title);
+if (clean.isEmpty) return family;
+final words = clean.split(' ');
+family.add(clean);
+if (words.length >= 2) family.add(words.take(2).join(' '));
+if (words.length >= 3) family.add(words.take(3).join(' '));
+final ci = title.indexOf(':');
+if (ci > 0) {
+final bc = _cleanTitle(title.substring(0, ci));
+if (bc.isNotEmpty) family.add(bc);
+}
+return family;
 }
 
-/// حساب التشابه بين نصين باستخدام Jaccard similarity
-double _similarity(String a, String b) {
-  if (a.isEmpty || b.isEmpty) return 0;
-  final setA = a.split(' ').toSet();
-  final setB = b.split(' ').toSet();
-  final intersection = setA.intersection(setB).length;
-  final union = setA.union(setB).length;
-  return union == 0 ? 0 : intersection / union;
+/// مطابقة عائلتين: تطابق تام OR كلمتين مشتركتين على الأقل وتشابه >= 50%
+bool _familyMatch(Set<String> fa, Set<String> fb) {
+for (final a in fa) {
+for (final b in fb) {
+if (a == b) return true;
+final sa = a.split(' ').toSet();
+final sb = b.split(' ').toSet();
+final inter = sa.intersection(sb).length;
+if (inter >= 2 && inter / sa.union(sb).length >= 0.5) return true;
+}
+}
+return false;
 }
 
-/// سلاسل معروفة بأسماء مختلفة (Hardcoded للتعامل معها)
+/// سلاسل معروفة بأسماء مختلفة
 const _knownSeriesAliases = <String, List<String>>{
-  'fast_furious': ['fast and the furious', 'fast furious', 'fast x', 'f9', 'furious', 'hobbs shaw', 'tokyo drift'],
-  'divergent': ['divergent', 'insurgent', 'allegiant', 'divergent series'],
-  'bourne': ['bourne identity', 'bourne supremacy', 'bourne ultimatum', 'bourne legacy', 'jason bourne'],
-  'my_fault': ['my fault', 'your fault', 'our fault', 'culpa mia', 'culpa nuestra'],
-  'hunger_games': ['hunger games', 'catching fire', 'mockingjay'],
-  'planet_of_apes': ['planet of the apes', 'rise of the planet', 'dawn of the planet', 'war for the planet', 'kingdom of the planet'],
-  'how_to_train_dragon': ['how to train your dragon', 'hidden world'],
-  'night_at_museum': ['night at the museum'],
-  'pirates_caribbean': ['pirates of the caribbean'],
-  'kingsman': ['kingsman secret service', 'kingsman golden circle'],
-  'xmen': ['x-men', 'xmen', 'wolverine', 'deadpool'],
-  'mission_impossible': ['mission impossible', 'ghost protocol', 'rogue nation', 'fallout', 'dead reckoning'],
-  'taken': ['taken'],
-  'maze_runner': ['maze runner', 'scorch trials', 'death cure'],
-  'conjuring': ['conjuring', 'annabelle', 'nun'],
-  'bad_boys': ['bad boys'],
-  'spiderman': ['spider-man', 'spider man'],
-  'transformers': ['transformers', 'bumblebee'],
-  'purge': ['purge', 'forever purge', 'first purge'],
-  'lord_of_rings': ['lord of the rings', 'fellowship', 'two towers', 'return of the king'],
-  'captain_america': ['captain america', 'winter soldier', 'civil war', 'first avenger'],
-  'jurassic': ['jurassic world', 'jurassic park', 'fallen kingdom', 'dominion', 'rebirth'],
-  'alien': ['alien', 'alien covenant', 'alien romulus'],
-  'a_quiet_place': ['quiet place'],
-  'avengers': ['avengers', 'infinity war', 'endgame', 'age of ultron'],
-  'rush_hour': ['rush hour'],
-  'extraction': ['extraction'],
-  'wrong_turn': ['wrong turn'],
-  'wolf_creek': ['wolf creek'],
-  'terrifier': ['terrifier'],
-  'rebel_moon': ['rebel moon'],
-  'after': ['after we collided', 'after ever happy', 'after we fell', 'after everything'],
-  'godzilla_kong': ['godzilla', 'kong'],
-  'jumanji': ['jumanji'],
-  'greenland': ['greenland'],
+'fast_furious': ['fast and the furious', 'fast furious', 'fast x', 'f9', 'furious', 'hobbs shaw', 'tokyo drift'],
+'divergent': ['divergent', 'insurgent', 'allegiant'],
+'bourne': ['bourne identity', 'bourne supremacy', 'bourne ultimatum', 'bourne legacy', 'jason bourne'],
+'my_fault': ['my fault', 'your fault', 'our fault', 'culpa mia', 'culpa nuestra'],
+'hunger_games': ['hunger games', 'catching fire', 'mockingjay'],
+'planet_of_apes': ['planet of the apes', 'rise of the planet', 'dawn of the planet', 'war for the planet', 'kingdom of the planet'],
+'how_to_train_dragon': ['how to train your dragon', 'hidden world'],
+'night_at_museum': ['night at the museum'],
+'pirates_caribbean': ['pirates of the caribbean'],
+'kingsman': ['kingsman secret service', 'kingsman golden circle'],
+'mission_impossible': ['mission impossible', 'ghost protocol', 'rogue nation', 'fallout', 'dead reckoning'],
+'taken': ['taken'],
+'maze_runner': ['maze runner', 'scorch trials', 'death cure'],
+'conjuring': ['conjuring', 'annabelle'],
+'bad_boys': ['bad boys'],
+'spiderman': ['spider-man', 'spider man'],
+'transformers': ['transformers', 'bumblebee'],
+'purge': ['purge', 'forever purge', 'first purge'],
+'lord_of_rings': ['lord of the rings', 'fellowship', 'two towers', 'return of the king'],
+'captain_america': ['captain america', 'winter soldier', 'civil war', 'first avenger'],
+'jurassic': ['jurassic world', 'jurassic park', 'fallen kingdom', 'dominion', 'rebirth'],
+'a_quiet_place': ['quiet place'],
+'avengers': ['avengers', 'infinity war', 'endgame', 'age of ultron'],
+'rush_hour': ['rush hour'],
+'extraction': ['extraction'],
+'wrong_turn': ['wrong turn'],
+'wolf_creek': ['wolf creek'],
+'terrifier': ['terrifier'],
+'rebel_moon': ['rebel moon'],
+'after': ['after we collided', 'after ever happy', 'after we fell', 'after everything'],
+'jumanji': ['jumanji'],
+'greenland': ['greenland'],
 };
 
-/// التحقق من اسمين: هل ينتميان لنفس السلسلة المعروفة؟
+/// ✅✅✅ مصححة: كلا الفيلمين يجب أن يحتوي على اسم من نفس المجموعة ✅✅✅
 bool _isKnownSeriesPair(String a, String b) {
-  final cleanA = _cleanTitle(a);
-  final cleanB = _cleanTitle(b);
-  
-  for (final entry in _knownSeriesAliases.entries) {
-    final aliases = entry.value;
-    final aMatch = aliases.any((alias) => cleanA.contains(alias) || cleanB.contains(alias));
-    final bMatch = aliases.any((alias) => cleanB.contains(alias) || cleanA.contains(alias));
-    // كلاهما يجب أن يحتوي على واحد على الأقل من الأسماء المستعارة
-    if (aMatch && bMatch) return true;
-  }
-  return false;
+final ca = _cleanTitle(a);
+final cb = _cleanTitle(b);
+for (final aliases in _knownSeriesAliases.values) {
+final am = aliases.any((al) => ca.contains(al));
+final bm = aliases.any((al) => cb.contains(al));
+if (am && bm) return true;
+}
+return false;
 }
 
-/// التجميع الذكي V3 - شامل وقوي
-List<Movie> groupMoviesSmart(List<Movie> all) {
-  SeriesRegistry.parts.clear();
-  
-  // 1. دمج الجودات المتطابقة
-  final deduped = Smart.dedup(all);
-  
-  // 2. بناء خريطة العائلات
-  final families = <Movie, Set<String>>{};
-  for (final m in deduped) {
-    families[m] = _extractNameFamily(m.title);
-  }
-  
-  // 3. Union-Find
-  final movies = deduped.toList();
-  final parent = <int, int>{for (var i = 0; i < movies.length; i++) i: i};
-  
-  int find(int x) {
-while (parent[x] != x) {
-parent[x] = parent[parent[x]!]!;
-x = parent[x] ?? x;
+bool _clusterAliasOk(List<Movie> list) {
+for (var i = 0; i < list.length; i++) {
+for (var j = i + 1; j < list.length; j++) {
+if (_isKnownSeriesPair(list[i].title, list[j].title)) return true;
 }
-return x;
-  }
-  
-  void union(int a, int b) {
-    final ra = find(a), rb = find(b);
-    if (ra != rb) parent[ra] = rb;
-  }
-  
-  // 4. مقارنة كل زوج
-  for (var i = 0; i < movies.length; i++) {
-    for (var j = i + 1; j < movies.length; j++) {
-      final a = movies[i], b = movies[j];
-      final famA = families[a]!, famB = families[b]!;
-      
-      // تحقق 1: هل هما في نفس السلسلة المعروفة؟
-      if (_isKnownSeriesPair(a.title, b.title)) {
-        union(i, j);
-        continue;
-      }
-      
-      // تحقق 2: هل هناك تطابق في العائلة؟
-      bool matched = false;
-      for (final fa in famA) {
-        for (final fb in famB) {
-          final sim = _similarity(fa, fb);
-          if (sim >= 0.5) { // 50% تشابه على الأقل
-            matched = true;
-            break;
-          }
-        }
-        if (matched) break;
-      }
-      
-      if (matched) union(i, j);
-    }
-  }
-  
-  // 5. تجميع النتائج
-  final groups = <int, List<Movie>>{};
-  for (var i = 0; i < movies.length; i++) {
-    groups.putIfAbsent(find(i), () => []).add(movies[i]);
-  }
-  
-  // 6. بناء النتيجة النهائية
-  final result = <Movie>[];
-  for (final list in groups.values) {
-    if (list.length >= 2) {
-      // سلسلة! رتبها حسب msgId
-      list.sort((a, b) => a.msgId.compareTo(b.msgId));
-      for (final m in list) SeriesRegistry.parts[m.id] = list;
-      result.add(list.first);
-    } else {
-      result.add(list.first);
-    }
-  }
-  
-  result.sort((a, b) => b.date.compareTo(a.date));
-  return result;
+}
+return false;
 }
 
-/// التحقق النهائي عبر TMDB (للتوافق فقط)
+/// بناء المجموعات بالتشابه فقط (بدون دمج عشوائي)
+Map<String, List<Movie>> _buildClusters(List<Movie> deduped) {
+final clusters = <String, List<Movie>>{};
+for (final m in deduped) {
+final b = _cleanTitle(m.title);
+if (b.isEmpty) continue;
+clusters.putIfAbsent(b, () => []).add(m);
+}
+final keys = clusters.keys.toList();
+final parent = <String, String>{for (final k in keys) k: k};
+String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
+final fams = <String, Set<String>>{for (final k in keys) k: _extractNameFamily(k)};
+for (var i = 0; i < keys.length; i++) {
+for (var j = i + 1; j < keys.length; j++) {
+if (_familyMatch(fams[keys[i]]!, fams[keys[j]]!)) {
+parent[find(keys[i])] = find(keys[j]);
+}
+}
+}
+final merged = <String, List<Movie>>{};
+for (final k in keys) { merged.putIfAbsent(find(k), () => []).addAll(clusters[k]!); }
+return merged;
+}
+
+/// التحقق عبر TMDB
+class TmdbCheck {
+static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
+static final Map<String, int> _cache = {};
+static Future<int> collectionOf(String title) async {
+final k = title.toLowerCase();
+if (_cache.containsKey(k)) return _cache[k]!;
+int coll = 0;
+try {
+final r = await _d.get('https://api.themoviedb.org/3/search/movie', queryParameters: {'api_key': Tmdb.apiKey, 'query': title.split('\n').first, 'include_adult': 'false'});
+final res = (r.data['results'] as List?);
+if (res != null && res.isNotEmpty) {
+final id = res[0]['id'];
+if (id is int) {
+final d = await _d.get('https://api.themoviedb.org/3/movie/$id', queryParameters: {'api_key': Tmdb.apiKey});
+final c = d.data['belongs_to_collection'];
+if (c is Map && c['id'] is int) coll = c['id'] as int;
+}
+}
+} catch (_) {}
+_cache[k] = coll;
+return coll;
+}
+}
+
 bool _verifyBusy = false;
 Future<void> verifySeries() async {
-  if (_verifyBusy) return;
-  _verifyBusy = true;
-  try {
-    // groupMoviesSmart تقوم بكل العمل الآن
-    groupMoviesSmart(Store.all());
-    Store.tick.value++;
-  } finally {
-    _verifyBusy = false;
-  }
+if (_verifyBusy) return;
+_verifyBusy = true;
+try {
+final merged = _buildClusters(Smart.dedup(Store.all()));
+for (final entry in merged.entries) {
+final list = entry.value;
+if (list.length < 2) continue;
+if (_clusterAliasOk(list)) continue;
+if (SeriesRegistry.verifiedParts.containsKey(entry.key)) continue;
+final byColl = <int, List<Movie>>{};
+for (final m in list.take(4)) {
+final c = await TmdbCheck.collectionOf(m.title);
+if (c > 0) byColl.putIfAbsent(c, () => []).add(m);
+}
+List<Movie>? best;
+for (final l in byColl.values) {
+if (l.length >= 2 && (best == null || l.length > best.length)) best = l;
+}
+SeriesRegistry.verifiedParts[entry.key] = best;
+}
+Store.tick.value++;
+} finally {
+_verifyBusy = false;
+}
+}
+
+/// التجميع النهائي: سلسلة فقط إذا أكدت Aliases أو TMDB
+List<Movie> groupMoviesSmart(List<Movie> all) {
+SeriesRegistry.parts.clear();
+final deduped = Smart.dedup(all);
+final merged = _buildClusters(deduped);
+
+// تشغيل التحقق بالخلفية للمجموعات غير المؤكدة
+for (final entry in merged.entries) {
+if (entry.value.length < 2) continue;
+if (_clusterAliasOk(entry.value)) continue;
+if (!SeriesRegistry.verifiedParts.containsKey(entry.key)) {
+verifySeries();
+break;
+}
+}
+
+final clusteredIds = <String>{};
+for (final list in merged.values) { for (final m in list) clusteredIds.add(m.id); }
+final result = <Movie>[];
+for (final m in deduped) { if (!clusteredIds.contains(m.id)) result.add(m); }
+
+for (final entry in merged.entries) {
+final list = entry.value;
+if (list.length < 2) { result.addAll(list); continue; }
+if (_clusterAliasOk(list)) {
+final sorted = List<Movie>.from(list)..sort((a, b) => a.msgId.compareTo(b.msgId));
+for (final m in sorted) SeriesRegistry.parts[m.id] = sorted;
+result.add(sorted.first);
+continue;
+}
+final verified = SeriesRegistry.verifiedParts[entry.key];
+if (verified != null && verified.length >= 2) {
+final sorted = List<Movie>.from(verified)..sort((a, b) => a.msgId.compareTo(b.msgId));
+final ids = sorted.map((m) => m.id).toSet();
+for (final m in sorted) SeriesRegistry.parts[m.id] = sorted;
+result.add(sorted.first);
+result.addAll(list.where((m) => !ids.contains(m.id)));
+} else {
+result.addAll(list);
+}
+}
+result.sort((a, b) => b.date.compareTo(a.date));
+return result;
 }
 
 String seriesDisplayName(Movie m) {
-  final parts = SeriesRegistry.partsOf(m.id);
-  if (parts.isEmpty) return m.title;
-  
-  // استخراج الاسم المشترك
-  final clean = _cleanTitle(parts.first.title);
-  if (clean.isEmpty) return m.title;
-  
-  final words = clean.split(' ');
-  return words.take(2).join(' ').replaceAll('_', ' ');
+final parts = SeriesRegistry.partsOf(m.id);
+if (parts.isEmpty) return m.title;
+final clean = _cleanTitle(parts.first.title);
+if (clean.isEmpty) return m.title;
+return clean.split(' ').take(2).join(' ');
 }
 
 /* ============================================================
    ✅ منطق قديم (للتوافق)
    ============================================================ */
 class SeriesItem {
-  final bool isSeries;
-  final Movie? movie;
-  final String? seriesTitle;
-  final List<Movie>? parts;
-  SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
-  SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
+final bool isSeries;
+final Movie? movie;
+final String? seriesTitle;
+final List<Movie>? parts;
+SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
+SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
 }
 
 String extractSeriesBase(String title) => _cleanTitle(title).split(' ').take(2).join('_');
 
 List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
-  final items = groupMoviesSmart(all);
-  return items.map((m) {
-    if (SeriesRegistry.isSeries(m.id)) {
-      return SeriesItem.series(seriesDisplayName(m), SeriesRegistry.partsOf(m.id));
-    }
-    return SeriesItem.movie(m);
-  }).toList();
+final items = groupMoviesSmart(all);
+return items.map((m) {
+if (SeriesRegistry.isSeries(m.id)) {
+return SeriesItem.series(seriesDisplayName(m), SeriesRegistry.partsOf(m.id));
+}
+return SeriesItem.movie(m);
+}).toList();
 }
 
 /* ============================================================
