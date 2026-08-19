@@ -863,7 +863,7 @@ String _cleanTitle(String title) {
   t = t.replaceAll(RegExp(r'(?:part|chapter|الجزء|جزء)\s*:?\s*[\w\d]+', caseSensitive: false), ' ');
   
   // حذف الرموز الخاصة
-  t = t.replaceAll(RegExp(r'[_|:–\-_\.\,\'\"\!\?\(\)\[\]]+'), ' ');
+  t = t.replaceAll(RegExp(r'[_|:–\-_\.,!?()\[\]]+'), ' ');
   
   // تصحيح الأخطاء الإملائية الشائعة
   t = t.replaceAll('Avengerslnfinity', 'Avengers Infinity');
@@ -1005,11 +1005,11 @@ List<Movie> groupMoviesSmart(List<Movie> all) {
   final parent = <int, int>{for (var i = 0; i < movies.length; i++) i: i};
   
   int find(int x) {
-    while (parent[x] != x) {
-      parent[x] = parent[parent[x]]!;
-      x = parent[x];
-    }
-    return x;
+while (parent[x] != x) {
+parent[x] = parent[parent[x]!]!;
+x = parent[x] ?? x;
+}
+return x;
   }
   
   void union(int a, int b) {
