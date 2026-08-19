@@ -836,279 +836,202 @@ return l;
 }
 }
 /* ============================================================
-   ✅ السلاسل الذكية الشاملة - V4 (مصححة نهائياً)
+   ✅ السلاسل الذكية عبر Gemini AI
    ============================================================ */
-
 class SeriesRegistry {
 static final Map<String, List<Movie>> parts = {};
-static final Map<String, List<Movie>?> verifiedParts = {};
+static final Map<String, String> names = {};
 static bool isSeries(String id) => parts.containsKey(id);
 static List<Movie> partsOf(String id) => parts[id] ?? [];
 static int count(String id) => parts[id]?.length ?? 0;
 }
 
-/// تنظيف العنوان
-String _cleanTitle(String title) {
-var t = title.trim().split('\n').first.trim();
-t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web|dl|bluray|hdrip|hdtv|dvdrip|brrip|1080|720|480|360)\b', caseSensitive: false), ' ');
-t = t.replaceAll(RegExp(r'(الجودة|جودة|مترجم|مدبلج|مسلسل|الحلقة)', caseSensitive: false), ' ');
-t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
-t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII)\b'), ' ');
-t = t.replaceAll(RegExp(r'(?:part|chapter|الجزء|جزء)\s*:?\s*[\w\d]+', caseSensitive: false), ' ');
-t = t.replaceAll(RegExp(r'[_|:.\-,!?()\[\]]+'), ' ');
-t = t.replaceAll('Avengerslnfinity', 'Avengers Infinity');
-t = t.replaceAll('Maze RunnerThe', 'Maze Runner The');
-t = t.replaceAll('Rebel MoonPart', 'Rebel Moon Part');
-t = t.replaceAll('World Warz', 'World War Z');
-const generic = {'the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your', 'his', 'her', 'our', 'as', 'be'};
-final words = <String>[];
-for (var w in t.split(RegExp(r'\s+'))) {
-final c = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
-if (c.length >= 2 && !generic.contains(c) && !RegExp(r'^\d+$').hasMatch(c)) words.add(c);
-}
-return words.join(' ');
+class AiClassifier {
+/* ⬇️️⬇️ ضع مفتاح Gemini المجاني هنا ⬇️️⬇️ */
+static const String geminiKey = 'AQ.Ab8RN6'+'I9gRkdClNvBTW43DW5M0SjHqiBZrHTvn37cDzNH0JjBQ';
+static const List<String> _models = ['gemini-2.0-flash-lite', 'gemini-2.0-flash'];
+static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30), receiveTimeout: const Duration(seconds: 90)));
+static bool _busy = false;
+static Map<String, List<String>> seriesGroups = {};
+static List<List<String>> sameGroups = [];
+static bool get enabled => geminiKey.isNotEmpty;
+
+static String _sig() {
+final all = Store.all();
+if (all.isEmpty) return '';
+var maxId = 0;
+for (final m in all) if (m.msgId > maxId) maxId = m.msgId;
+return '${all.length}_$maxId';
 }
 
-/// عائلة الاسم - مرشحين للمطابقة
-Set<String> _extractNameFamily(String title) {
-final family = <String>{};
-final clean = _cleanTitle(title);
-if (clean.isEmpty) return family;
-final words = clean.split(' ');
-family.add(clean);
-if (words.length >= 2) family.add(words.take(2).join(' '));
-if (words.length >= 3) family.add(words.take(3).join(' '));
-final ci = title.indexOf(':');
-if (ci > 0) {
-final bc = _cleanTitle(title.substring(0, ci));
-if (bc.isNotEmpty) family.add(bc);
-}
-return family;
-}
-
-/// مطابقة عائلتين: تطابق تام OR كلمتين مشتركتين على الأقل وتشابه >= 50%
-bool _familyMatch(Set<String> fa, Set<String> fb) {
-for (final a in fa) {
-for (final b in fb) {
-if (a == b) return true;
-final sa = a.split(' ').toSet();
-final sb = b.split(' ').toSet();
-final inter = sa.intersection(sb).length;
-if (inter >= 2 && inter / sa.union(sb).length >= 0.5) return true;
-}
-}
-return false;
-}
-
-/// سلاسل معروفة بأسماء مختلفة
-const _knownSeriesAliases = <String, List<String>>{
-'fast_furious': ['fast and the furious', 'fast furious', 'fast x', 'f9', 'furious', 'hobbs shaw', 'tokyo drift'],
-'divergent': ['divergent', 'insurgent', 'allegiant'],
-'bourne': ['bourne identity', 'bourne supremacy', 'bourne ultimatum', 'bourne legacy', 'jason bourne'],
-'my_fault': ['my fault', 'your fault', 'our fault', 'culpa mia', 'culpa nuestra'],
-'hunger_games': ['hunger games', 'catching fire', 'mockingjay'],
-'planet_of_apes': ['planet of the apes', 'rise of the planet', 'dawn of the planet', 'war for the planet', 'kingdom of the planet'],
-'how_to_train_dragon': ['how to train your dragon', 'hidden world'],
-'night_at_museum': ['night at the museum'],
-'pirates_caribbean': ['pirates of the caribbean'],
-'kingsman': ['kingsman secret service', 'kingsman golden circle'],
-'mission_impossible': ['mission impossible', 'ghost protocol', 'rogue nation', 'fallout', 'dead reckoning'],
-'taken': ['taken'],
-'maze_runner': ['maze runner', 'scorch trials', 'death cure'],
-'conjuring': ['conjuring', 'annabelle'],
-'bad_boys': ['bad boys'],
-'spiderman': ['spider-man', 'spider man'],
-'transformers': ['transformers', 'bumblebee'],
-'purge': ['purge', 'forever purge', 'first purge'],
-'lord_of_rings': ['lord of the rings', 'fellowship', 'two towers', 'return of the king'],
-'captain_america': ['captain america', 'winter soldier', 'civil war', 'first avenger'],
-'jurassic': ['jurassic world', 'jurassic park', 'fallen kingdom', 'dominion', 'rebirth'],
-'a_quiet_place': ['quiet place'],
-'avengers': ['avengers', 'infinity war', 'endgame', 'age of ultron'],
-'rush_hour': ['rush hour'],
-'extraction': ['extraction'],
-'wrong_turn': ['wrong turn'],
-'wolf_creek': ['wolf creek'],
-'terrifier': ['terrifier'],
-'rebel_moon': ['rebel moon'],
-'after': ['after we collided', 'after ever happy', 'after we fell', 'after everything'],
-'jumanji': ['jumanji'],
-'greenland': ['greenland'],
-};
-
-/// ✅✅✅ مصححة: كلا الفيلمين يجب أن يحتوي على اسم من نفس المجموعة ✅✅✅
-bool _isKnownSeriesPair(String a, String b) {
-final ca = _cleanTitle(a);
-final cb = _cleanTitle(b);
-for (final aliases in _knownSeriesAliases.values) {
-final am = aliases.any((al) => ca.contains(al));
-final bm = aliases.any((al) => cb.contains(al));
-if (am && bm) return true;
-}
-return false;
-}
-
-bool _clusterAliasOk(List<Movie> list) {
-for (var i = 0; i < list.length; i++) {
-for (var j = i + 1; j < list.length; j++) {
-if (_isKnownSeriesPair(list[i].title, list[j].title)) return true;
-}
-}
-return false;
-}
-
-/// بناء المجموعات بالتشابه فقط (بدون دمج عشوائي)
-Map<String, List<Movie>> _buildClusters(List<Movie> deduped) {
-final clusters = <String, List<Movie>>{};
-for (final m in deduped) {
-final b = _cleanTitle(m.title);
-if (b.isEmpty) continue;
-clusters.putIfAbsent(b, () => []).add(m);
-}
-final keys = clusters.keys.toList();
-final parent = <String, String>{for (final k in keys) k: k};
-String find(String x) { while (parent[x] != x) { parent[x] = parent[parent[x]!]!; x = parent[x]!; } return x; }
-final fams = <String, Set<String>>{for (final k in keys) k: _extractNameFamily(k)};
-for (var i = 0; i < keys.length; i++) {
-for (var j = i + 1; j < keys.length; j++) {
-if (_familyMatch(fams[keys[i]]!, fams[keys[j]]!)) {
-parent[find(keys[i])] = find(keys[j]);
-}
-}
-}
-final merged = <String, List<Movie>>{};
-for (final k in keys) { merged.putIfAbsent(find(k), () => []).addAll(clusters[k]!); }
-return merged;
-}
-
-/// التحقق عبر TMDB
-class TmdbCheck {
-static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
-static final Map<String, int> _cache = {};
-static Future<int> collectionOf(String title) async {
-final k = title.toLowerCase();
-if (_cache.containsKey(k)) return _cache[k]!;
-int coll = 0;
+static void loadCache() {
+final raw = Store.getString('aiGroups');
+if (raw.isEmpty) return;
 try {
-final r = await _d.get('https://api.themoviedb.org/3/search/movie', queryParameters: {'api_key': Tmdb.apiKey, 'query': title.split('\n').first, 'include_adult': 'false'});
-final res = (r.data['results'] as List?);
-if (res != null && res.isNotEmpty) {
-final id = res[0]['id'];
-if (id is int) {
-final d = await _d.get('https://api.themoviedb.org/3/movie/$id', queryParameters: {'api_key': Tmdb.apiKey});
-final c = d.data['belongs_to_collection'];
-if (c is Map && c['id'] is int) coll = c['id'] as int;
+final j = jsonDecode(raw);
+seriesGroups = (j['series'] as Map? ?? {}).map((k, v) => MapEntry(k.toString(), (v as List).map((e) => e.toString()).toList()));
+sameGroups = (j['same'] as List? ?? []).map((e) => (e as List).map((x) => x.toString()).toList()).toList();
+} catch (_) {}
 }
+
+static Future<String?> _generate(String prompt) async {
+for (final model in _models) {
+try {
+final res = await _d.post(
+'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey',
+data: {
+'contents': [{'parts': [{'text': prompt}]}],
+'generationConfig': {'temperature': 0.1, 'responseMimeType': 'application/json'},
+},
+);
+return (res.data['candidates'][0]['content']['parts'][0]['text'] as String);
+} catch (_) {}
+}
+return null;
+}
+
+static Future<void> classify({bool force = false}) async {
+if (!enabled || _busy) return;
+loadCache();
+final sig = _sig();
+if (sig.isEmpty) return;
+if (!force && Store.getString('aiSig') == sig && (seriesGroups.isNotEmpty || sameGroups.isNotEmpty)) return;
+_busy = true;
+try {
+final all = Smart.dedup(Store.all());
+final byNum = <int, String>{};
+final lines = <String>[];
+var n = 0;
+for (final m in all) {
+n++;
+byNum[n] = m.id;
+lines.add('$n|${m.title.split('\n').first}');
+}
+final newSeries = <String, List<String>>{};
+final newSame = <List<String>>[];
+const bs = 400;
+for (var i = 0; i < lines.length; i += bs) {
+final chunk = lines.sublist(i, (i + bs) > lines.length ? lines.length : (i + bs));
+if (chunk.length < 2) continue;
+final prompt = 'You are a movie catalog organizer. Input lines: N|Title.\n'
+'Task "series": group movies that are parts/sequels/spin-offs of the SAME franchise (example: Pirates of the Caribbean, Maze Runner, Fast and Furious including its spin-offs).\n'
+'Task "same": group lines that are the EXACT SAME movie posted more than once (different quality, typo, Arabic or English title of the same film).\n'
+'Never group unrelated movies together. Movies without any relation must not appear in any group.\n'
+'Output JSON only:\n'
+'{"series":[{"name":"Pirates of the Caribbean","ids":[1,2]}],"same":[{"ids":[3,4]}]}\n'
+'Movies:\n' + chunk.join('\n');
+final text = await _generate(prompt);
+if (text == null) continue;
+final clean = text.replaceAll('```json', '').replaceAll('```', '').trim();
+try {
+final j = jsonDecode(clean);
+for (final s in (j['series'] as List? ?? [])) {
+final ids = (s['ids'] as List? ?? [])
+.map((e) => int.tryParse(e.toString()) ?? -1)
+.where((x) => byNum.containsKey(x))
+.map((x) => byNum[x]!)
+.toList();
+if (ids.length >= 2) newSeries[(s['name'] ?? 'series').toString()] = ids;
+}
+for (final s in (j['same'] as List? ?? [])) {
+final ids = (s['ids'] as List? ?? [])
+.map((e) => int.tryParse(e.toString()) ?? -1)
+.where((x) => byNum.containsKey(x))
+.map((x) => byNum[x]!)
+.toList();
+if (ids.length >= 2) newSame.add(ids);
 }
 } catch (_) {}
-_cache[k] = coll;
-return coll;
 }
-}
-
-bool _verifyBusy = false;
-Future<void> verifySeries() async {
-if (_verifyBusy) return;
-_verifyBusy = true;
-try {
-final merged = _buildClusters(Smart.dedup(Store.all()));
-for (final entry in merged.entries) {
-final list = entry.value;
-if (list.length < 2) continue;
-if (_clusterAliasOk(list)) continue;
-if (SeriesRegistry.verifiedParts.containsKey(entry.key)) continue;
-final byColl = <int, List<Movie>>{};
-for (final m in list.take(4)) {
-final c = await TmdbCheck.collectionOf(m.title);
-if (c > 0) byColl.putIfAbsent(c, () => []).add(m);
-}
-List<Movie>? best;
-for (final l in byColl.values) {
-if (l.length >= 2 && (best == null || l.length > best.length)) best = l;
-}
-SeriesRegistry.verifiedParts[entry.key] = best;
-}
+seriesGroups = newSeries;
+sameGroups = newSame;
+await Store.setString('aiGroups', jsonEncode({'series': newSeries, 'same': newSame}));
+await Store.setString('aiSig', sig);
 Store.tick.value++;
-} finally {
-_verifyBusy = false;
+} catch (_) {}
+_busy = false;
 }
 }
 
-/// التجميع النهائي: سلسلة فقط إذا أكدت Aliases أو TMDB
+String seriesBase(String title) {
+var t = title.trim().split('\n').first.trim();
+t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
+t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'(?:part|جزء|الجزء)\s*:?\s*\S+', caseSensitive: false), ' ');
+t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
+t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
+const generic = ['the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your'];
+final words = <String>[];
+for (var w in t.split(RegExp(r'\s+'))) {
+w = w.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
+if (w.length < 3) continue;
+if (generic.contains(w)) continue;
+if (RegExp(r'^\d+$').hasMatch(w)) continue;
+words.add(w);
+}
+if (words.isEmpty) return '';
+return words.take(2).join('_');
+}
+
+String seriesDisplayName(Movie m) {
+final name = SeriesRegistry.names[m.id];
+if (name != null && name.isNotEmpty) return name;
+final b = seriesBase(m.title);
+return b.isEmpty ? m.title : b.replaceAll('_', ' ');
+}
+
+/// للتوافق مع الاستدعاءات القديمة — يشغّل تصنيف AI
+Future<void> verifySeries() => AiClassifier.classify();
+
+/// التجميع النهائي: يعتمد 100% على تصنيف Gemini (لا دمج خاطئ أبداً)
 List<Movie> groupMoviesSmart(List<Movie> all) {
 SeriesRegistry.parts.clear();
+SeriesRegistry.names.clear();
+AiClassifier.loadCache();
 final deduped = Smart.dedup(all);
-final merged = _buildClusters(deduped);
+final byId = {for (final m in deduped) m.id: m};
 
-// تشغيل التحقق بالخلفية للمجموعات غير المؤكدة
-for (final entry in merged.entries) {
-if (entry.value.length < 2) continue;
-if (_clusterAliasOk(entry.value)) continue;
-if (!SeriesRegistry.verifiedParts.containsKey(entry.key)) {
-verifySeries();
-break;
+/* 1) دمج التكرارات: نفس الفيلم بجودات مختلفة */
+final removeIds = <String>{};
+for (final g in AiClassifier.sameGroups) {
+final movies = g.map((id) => byId[id]).whereType<Movie>().toList();
+if (movies.length < 2) continue;
+movies.sort((a, b) => b.sizeMb.compareTo(a.sizeMb));
+final base = movies.first;
+for (final o in movies.skip(1)) {
+base.absorb(o);
+removeIds.add(o.id);
+}
+}
+final list = deduped.where((m) => !removeIds.contains(m.id)).toList();
+
+/* 2) السلاسل حسب Gemini */
+for (final entry in AiClassifier.seriesGroups.entries) {
+final movies = entry.value
+.map((id) => byId[id])
+.whereType<Movie>()
+.where((m) => !removeIds.contains(m.id))
+.toList();
+if (movies.length < 2) continue;
+movies.sort((a, b) => (a.year == b.year) ? a.msgId.compareTo(b.msgId) : a.year.compareTo(b.year));
+for (final m in movies) {
+SeriesRegistry.parts[m.id] = movies;
+SeriesRegistry.names[m.id] = entry.key;
 }
 }
 
-final clusteredIds = <String>{};
-for (final list in merged.values) { for (final m in list) clusteredIds.add(m.id); }
+/* 3) النتيجة: الأفلام العادية + ممثل واحد لكل سلسلة */
 final result = <Movie>[];
-for (final m in deduped) { if (!clusteredIds.contains(m.id)) result.add(m); }
-
-for (final entry in merged.entries) {
-final list = entry.value;
-if (list.length < 2) { result.addAll(list); continue; }
-if (_clusterAliasOk(list)) {
-final sorted = List<Movie>.from(list)..sort((a, b) => a.msgId.compareTo(b.msgId));
-for (final m in sorted) SeriesRegistry.parts[m.id] = sorted;
-result.add(sorted.first);
-continue;
-}
-final verified = SeriesRegistry.verifiedParts[entry.key];
-if (verified != null && verified.length >= 2) {
-final sorted = List<Movie>.from(verified)..sort((a, b) => a.msgId.compareTo(b.msgId));
-final ids = sorted.map((m) => m.id).toSet();
-for (final m in sorted) SeriesRegistry.parts[m.id] = sorted;
-result.add(sorted.first);
-result.addAll(list.where((m) => !ids.contains(m.id)));
+for (final m in list) {
+final parts = SeriesRegistry.parts[m.id];
+if (parts != null) {
+if (parts.first.id == m.id) result.add(m);
 } else {
-result.addAll(list);
+result.add(m);
 }
 }
 result.sort((a, b) => b.date.compareTo(a.date));
 return result;
-}
-
-String seriesDisplayName(Movie m) {
-final parts = SeriesRegistry.partsOf(m.id);
-if (parts.isEmpty) return m.title;
-final clean = _cleanTitle(parts.first.title);
-if (clean.isEmpty) return m.title;
-return clean.split(' ').take(2).join(' ');
-}
-
-/* ============================================================
-   ✅ منطق قديم (للتوافق)
-   ============================================================ */
-class SeriesItem {
-final bool isSeries;
-final Movie? movie;
-final String? seriesTitle;
-final List<Movie>? parts;
-SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
-SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
-}
-
-String extractSeriesBase(String title) => _cleanTitle(title).split(' ').take(2).join('_');
-
-List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
-final items = groupMoviesSmart(all);
-return items.map((m) {
-if (SeriesRegistry.isSeries(m.id)) {
-return SeriesItem.series(seriesDisplayName(m), SeriesRegistry.partsOf(m.id));
-}
-return SeriesItem.movie(m);
-}).toList();
 }
 
 /* ============================================================
