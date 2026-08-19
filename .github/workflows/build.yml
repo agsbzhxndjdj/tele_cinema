@@ -123,96 +123,94 @@ jobs:
 
       - name: Patch MainActivity (كشف TV + تشغيل خارجي + تصدير/استيراد النسخ الاحتياطي)
         run: |
-          MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
-          PKG=$(head -n 1 "$MAIN_ACT")
-          {
-            echo "$PKG"
-            cat << 'KTEOF'
-
-            import android.content.pm.PackageManager
-            import io.flutter.embedding.android.FlutterActivity
-            import io.flutter.embedding.engine.FlutterEngine
-            import io.flutter.plugin.common.MethodChannel
-
-            class MainActivity : FlutterActivity() {
-                override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-                    super.configureFlutterEngine(flutterEngine)
-                    MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
-                        .setMethodCallHandler { call, result ->
-                            when (call.method) {
-                                "isTv" -> {
-                                    val pm = packageManager
-                                    result.success(
-                                        pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
-                                            pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)
-                                    )
-                                }
-                                "openExternal" -> {
-                                    val url = call.argument<String>("url")
-                                    if (url == null) { result.success(false); return@setMethodCallHandler }
-                                    val uri = android.net.Uri.parse(url)
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
-                                    intent.setDataAndType(uri, "video/*")
-                                    try {
-                                        startActivity(android.content.Intent.createChooser(intent, "تشغيل بواسطة"))
-                                        result.success(true)
-                                    } catch (e: Exception) {
-                                        result.success(false)
-                                    }
-                                }
-                                "saveToDownloads" -> {
-                                    val name = call.argument<String>("name") ?: "telecinema_backup.json"
-                                    val content = call.argument<String>("content") ?: ""
-                                    try {
-                                        if (android.os.Build.VERSION.SDK_INT >= 29) {
-                                            val resolver = contentResolver
-                                            val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                                            resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
-                                            val values = android.content.ContentValues().apply {
-                                                put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
-                                                put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
-                                                put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-                                            }
-                                            val u = resolver.insert(uri, values)
-                                            u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
-                                            result.success(u != null)
-                                        } else {
-                                            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
-                                            f.writeText(content)
-                                            result.success(true)
-                                        }
-                                    } catch (e: Exception) {
-                                        result.success(false)
-                                    }
-                                }
-                                "readFromDownloads" -> {
-                                    val name = call.argument<String>("name") ?: "telecinema_backup.json"
-                                    var text: String? = null
-                                    try {
-                                        if (android.os.Build.VERSION.SDK_INT >= 29) {
-                                            val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-                                            val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
-                                            cur?.use {
-                                                if (it.moveToFirst()) {
-                                                    val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
-                                                    text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
-                                                }
-                                            }
-                                        } else {
-                                            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
-                                            if (f.exists()) text = f.readText()
-                                        }
-                                    } catch (e: Exception) { }
-                                    result.success(text)
-                                }
-                                else -> result.notImplemented()
-                            }
-                        }
-                }
-            }
-            KTEOF
-          } > "$MAIN_ACT"
-          cat "$MAIN_ACT"
+      - name: Patch MainActivity (كشف TV + تشغيل خارجي + نسخ احتياطي)
+        run: |
+          python3 - << 'PYEOF'
+          import glob
+          path = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)[0]
+          pkg = open(path, encoding='utf-8').read().splitlines()[0]
+          kotlin = pkg + "\n" + '''
+          import android.content.pm.PackageManager
+          import io.flutter.embedding.android.FlutterActivity
+          import io.flutter.embedding.engine.FlutterEngine
+          import io.flutter.plugin.common.MethodChannel
+          class MainActivity : FlutterActivity() {
+          override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+          super.configureFlutterEngine(flutterEngine)
+          MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
+          .setMethodCallHandler { call, result ->
+          when (call.method) {
+          "isTv" -> {
+          val pm = packageManager
+          result.success(pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION))
+          }
+          "openExternal" -> {
+          val url = call.argument<String>("url")
+          if (url == null) { result.success(false); return@setMethodCallHandler }
+          val uri = android.net.Uri.parse(url)
+          val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+          intent.setDataAndType(uri, "video/*")
+          try {
+          startActivity(android.content.Intent.createChooser(intent, "Play with"))
+          result.success(true)
+          } catch (e: Exception) {
+          result.success(false)
+          }
+          }
+          "saveToDownloads" -> {
+          val name = call.argument<String>("name") ?: "telecinema_backup.json"
+          val content = call.argument<String>("content") ?: ""
+          try {
+          if (android.os.Build.VERSION.SDK_INT >= 29) {
+          val resolver = contentResolver
+          val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+          resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
+          val values = android.content.ContentValues().apply {
+          put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+          put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+          put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+          }
+          val u = resolver.insert(uri, values)
+          u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
+          result.success(u != null)
+          } else {
+          val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+          f.writeText(content)
+          result.success(true)
+          }
+          } catch (e: Exception) {
+          result.success(false)
+          }
+          }
+          "readFromDownloads" -> {
+          val name = call.argument<String>("name") ?: "telecinema_backup.json"
+          var text: String? = null
+          try {
+          if (android.os.Build.VERSION.SDK_INT >= 29) {
+          val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+          val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
+          cur?.use {
+          if (it.moveToFirst()) {
+          val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
+          text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
+          }
+          }
+          } else {
+          val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+          if (f.exists()) text = f.readText()
+          }
+          } catch (e: Exception) { }
+          result.success(text)
+          }
+          else -> result.notImplemented()
+          }
+          }
+          }
+          }
+          '''
+          open(path, 'w', encoding='utf-8').write(kotlin)
+          print('✅ MainActivity patched')
+          PYEOF
 
       - name: Prepare (pub get + icons)
         run: |
