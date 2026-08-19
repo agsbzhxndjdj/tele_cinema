@@ -30,35 +30,92 @@ jobs:
 
       - name: Inject keystore + google-services
         run: |
-          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; fi
-          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; fi
-          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; fi
+          if [ -f KEYSTORE_B64 ]; then base64 -d -i KEYSTORE_B64 > android/app/telecinema.keystore; echo "keystore decoded OK"; fi
+          if [ -f telecinema.keystore ]; then cp telecinema.keystore android/app/telecinema.keystore; echo "keystore copied OK"; fi
+          if [ -f google-services.json ]; then cp google-services.json android/app/google-services.json; echo "google-services copied OK"; fi
 
-      - name: Patch gradle (SDK 35)
+      - name: Verify files exist
         run: |
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' android/app/build.gradle
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/' android/app/build.gradle
-          sed -i 's/compileSdk = [0-9]*/compileSdk = 35/' android/app/build.gradle
-          sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 35/' android/app/build.gradle
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/' android/app/build.gradle
-          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/' android/app/build.gradle
-          sed -i 's/targetSdk = [0-9]*/targetSdk = 35/' android/app/build.gradle
-          sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 35/' android/app/build.gradle
-          echo "=== compileSdk check ==="
-          grep -n "compileSdk\|targetSdk" android/app/build.gradle
+          echo "=== الملفات الموجودة في lib ==="
+          ls -la lib/
+          echo ""
+          echo "=== محتوى lib/main.dart (أول 10 أسطر) ==="
+          head -10 lib/main.dart
 
-      - name: Patch AndroidManifest
+      - name: Patch gradle (google-services + signing + compileSdk 35)
         run: |
-          F=android/app/src/main/AndroidManifest.xml
-          if [ -f "$F" ]; then
-            sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' "$F"
-            sed -i 's|<application|<application android:usesCleartextTraffic="true"|' "$F"
-            sed -i 's|android:label="[^"]*"|android:label="تلي سينما"|' "$F"
-            sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' "$F"
-            sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>|' "$F"
-          fi
+          python3 - << 'PYEOF'
+          import re
+          NL = chr(10)
+          # 1) settings.gradle
+          p = 'android/settings.gradle'
+          s = open(p).read()
+          if 'google-services' not in s:
+              m = re.search(r'plugins\s*\{[^}]*\}', s)
+              if m:
+                  old = m.group(0)
+                  new = old[:-1] + NL + '    id "com.google.gms.google-services" version "4.4.0" apply false' + NL + '}'
+                  s = s.replace(old, new)
+                  open(p, 'w').write(s)
+                  print('settings.gradle patched')
+          # 2) app/build.gradle
+          p = 'android/app/build.gradle'
+          s = open(p).read()
+          if 'com.google.gms.google-services' not in s:
+              m = re.search(r'plugins\s*\{[^}]*\}', s)
+              if m:
+                  old = m.group(0)
+                  new = old[:-1] + NL + '    id "com.google.gms.google-services"' + NL + '}'
+                  s = s.replace(old, new)
+          sig = '    signingConfigs {' + NL
+          sig += '        release {' + NL
+          sig += "            storeFile file('telecinema.keystore')" + NL
+          sig += "            storePassword '12345678'" + NL
+          sig += "            keyAlias 'telecinema'" + NL
+          sig += "            keyPassword '12345678'" + NL
+          sig += '        }' + NL
+          sig += '    }' + NL
+          if 'signingConfigs' not in s:
+              s = s.replace('    buildTypes {', sig + '    buildTypes {', 1)
+          s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
+          out = []
+          for line in s.split(NL):
+              if 'compileSdk' in line and 'compileSdkVersion' not in line:
+                  out.append('    compileSdk = 35')
+              elif 'targetSdk' in line and 'targetSdkVersion' not in line:
+                  out.append('    targetSdk = 35')
+              elif 'minSdk' in line and 'minSdkVersion' not in line:
+                  out.append('    minSdk = 21')
+              else:
+                  out.append(line)
+          s = NL.join(out)
+          open(p, 'w').write(s)
+          print('gradle patched (SDK 35 + signing)')
+          PYEOF
+          echo "=== سطور compileSdk في build.gradle ==="
+          grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
 
-      - name: Patch MainActivity
+      - name: Patch AndroidManifest (HTTP + الاسم + Android TV + الإشعارات)
+        run: |
+          python3 - << 'PYEOF'
+          import re
+          NL = chr(10)
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p, encoding='utf-8').read()
+          if 'leanback' not in s:
+              s = s.replace('<application', '<uses-feature android:name="android.software.leanback" android:required="false" />' + NL + '    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />' + NL + '    <application', 1)
+          if 'usesCleartextTraffic' not in s:
+              s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
+          if 'LEANBACK_LAUNCHER' not in s:
+              s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>', '<category android:name="android.intent.category.LAUNCHER"/>' + NL + '                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>', 1)
+          if 'POST_NOTIFICATIONS' not in s:
+              s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>', '<uses-permission android:name="android.permission.INTERNET"/>' + NL + '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>', 1)
+          open(p, 'w', encoding='utf-8').write(s)
+          print('manifest patched')
+          PYEOF
+
+      - name: Patch MainActivity (كشف TV + تشغيل خارجي Cast)
         run: |
           MAIN_ACT=$(find android/app/src/main -name "MainActivity.kt" | head -n 1)
           PKG=$(head -n 1 "$MAIN_ACT")
@@ -88,7 +145,7 @@ jobs:
             echo '                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)'
             echo '                    intent.setDataAndType(uri, "video/*")'
             echo '                    try {'
-            echo '                        startActivity(android.content.Intent.createChooser(intent, "Play"))'
+            echo '                        startActivity(android.content.Intent.createChooser(intent, "تشغيل بواسطة"))'
             echo '                        result.success(true)'
             echo '                    } catch (e: Exception) {'
             echo '                        result.success(false)'
@@ -100,27 +157,55 @@ jobs:
             echo '    }'
             echo '}'
           } > "$MAIN_ACT"
+          cat "$MAIN_ACT"
 
-      - name: Prepare
+      - name: Prepare (pub get + icons)
         run: |
           flutter pub get
           flutter pub run flutter_launcher_icons:main || true
 
+      - name: Fix broken string literals in Dart files
+        run: |
+          python3 - << 'PYEOF'
+          import os
+          NL = chr(10)
+          BSN = chr(92) + 'n'
+          files = ['lib/core.dart', 'lib/tv.dart', 'lib/ui.dart']
+          for fp in files:
+              if not os.path.exists(fp):
+                  print('skip ' + fp)
+                  continue
+              content = open(fp, encoding='utf-8').read()
+              original = content
+              content = content.replace("split('" + BSN + "')", '___PS___')
+              content = content.replace("join('" + BSN + "')", '___PJ___')
+              content = content.replace(BSN, NL)
+              content = content.replace('___PS___', "split('" + BSN + "')")
+              content = content.replace('___PJ___', "join('" + BSN + "')")
+              content = content.replace("split('" + NL + "')", "split('" + BSN + "')")
+              content = content.replace("join('" + NL + "')", "join('" + BSN + "')")
+              content = content.replace('؟' + NL + 'سيتم', '؟' + BSN + 'سيتم')
+              content = content.replace('rawJson: item));', 'rawJson: Map<String, dynamic>.from(item)));')
+              if content != original:
+                  open(fp, 'w', encoding='utf-8').write(content)
+                  print('FIXED ' + fp)
+              else:
+                  print('OK ' + fp)
+          print('DART FIX DONE')
+          PYEOF
+
       - name: Build MOBILE APK
         run: |
+          echo "=== بناء تطبيق الجوال ==="
           flutter build apk --release -t lib/main.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
+          ls -lh build/app/outputs/flutter-apk/
 
-      - name: Build TV APK
-        run: |
-          sed -i 's/android:label="[^"]*"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
-          flutter build apk --release -t lib/app_tv.dart
-          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
+      # ❌ تم حذف خطوة بناء تطبيق التلفزيون (Build TV APK) نهائياً
 
-      - name: Upload APKs
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: tele-cinema-apks
+          name: tele-cinema-apk
           path: |
             build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
-            build/app/outputs/flutter-apk/tele-cinema-TV.apk
