@@ -4,22 +4,25 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 class ApiConfig {
 static const String baseUrl = 'http://13.49.41.150:5000';
 static const String apiKey = '9fded672447abe47324249048e9b3ee8a3472a6564e613dbfc50ff159655667a';
 }
+
 class App {
 static final ValueNotifier<String> scope = ValueNotifier('all');
 static final ValueNotifier<int> tab = ValueNotifier(0);
-static final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 static final ValueNotifier<int> tick = ValueNotifier(0);
 static final ValueNotifier<String> query = ValueNotifier('');
+static final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 }
+
 class Channel {
 final String username;
 String title;
@@ -28,6 +31,7 @@ Channel(this.username, {this.title = '', this.avatar});
 Map<String, dynamic> toJson() => {'username': username, 'title': title, 'avatar': avatar};
 static Channel fromJson(Map m) => Channel(m['username'] ?? '', title: m['title'] ?? '', avatar: m['avatar']);
 }
+
 class Movie {
 final String channel;
 final int msgId;
@@ -140,6 +144,7 @@ qualities: (m['qualities'] as List?)?.map((e) => Map<String, String>.from(e)).to
 rawJson: (m['raw_json'] as Map?)?.cast<String, dynamic>(),
 );
 }
+
 class Search {
 static String norm(String s) => s
 .toLowerCase()
@@ -156,6 +161,7 @@ if (nq.isEmpty) return src;
 return src.where((m) => nq.split(' ').every((t) => m.hay.contains(t))).toList();
 }
 }
+
 class Page {
 final List<Movie> movies;
 final int? before;
@@ -163,6 +169,7 @@ final String title;
 final String? avatar;
 Page(this.movies, this.before, this.title, this.avatar);
 }
+
 class Tg {
 static final Dio _dio = Dio(BaseOptions(
 receiveTimeout: const Duration(seconds: 60),
@@ -257,6 +264,7 @@ rawJson: rawJson,
 );
 }
 }
+
 class BulkLoader {
 static final Set<String> _running = {};
 static final ValueNotifier<String> status = ValueNotifier('');
@@ -288,6 +296,7 @@ status.value = '';
 Store.tick.value++;
 }
 }
+
 class Store {
 static late Box _ch, _mv, _st;
 static final ValueNotifier<int> tick = ValueNotifier(0);
@@ -516,7 +525,12 @@ d.remove(id);
 await _st.put('downloads', d);
 tick.value++;
 }
+/* ✅ التحميلات المعلّقة (للاستئناف التلقائي) */
+static Map<String, dynamic> pendingDownloads() => Map<String, dynamic>.from(_st.get('pendingDl') ?? {});
+static Future setPendingDownload(String id, Map<String, dynamic> v) async { final p = pendingDownloads(); p[id] = v; await _st.put('pendingDl', p); }
+static Future removePendingDownload(String id) async { final p = pendingDownloads(); p.remove(id); await _st.put('pendingDl', p); }
 }
+
 class Sync {
 static bool _busy = false;
 static Timer? _timer;
@@ -525,6 +539,8 @@ static void Function(int count, String channel)? onNewMovies;
 static void start() {
 _timer ??= Timer.periodic(const Duration(hours: 2), (_) => checkAll());
 Future.delayed(const Duration(seconds: 3), checkAll);
+/* ✅ استئناف التحميلات المتقطعة عند فتح التطبيق */
+Future.delayed(const Duration(seconds: 6), () => Downloader.resumePending());
 }
 static Future checkAll() async {
 if (_busy) return;
@@ -546,6 +562,7 @@ _busy = false;
 Store.tick.value++;
 }
 }
+
 class Downloader {
 static final Dio _dio = Dio();
 static final Map<String, CancelToken> _tokens = {};
@@ -556,6 +573,9 @@ static final Map<String, Movie> _movies = {};
 static final ValueNotifier<Map<String, double>> progress = ValueNotifier({});
 static final ValueNotifier<int> tick = ValueNotifier(0);
 static final ValueNotifier<bool> wifiBlocked = ValueNotifier(false);
+/* ✅ خدمة الخلفية: تُبقي التحميل حياً عند الخروج */
+static const MethodChannel _ch = MethodChannel('tele_cinema/device');
+static void _keepAlive(bool on) { try { _ch.invokeMethod(on ? 'startKeepAlive' : 'stopKeepAlive'); } catch (_) {} }
 static bool isActive(String id) => _tokens.containsKey(id);
 static bool isPaused(String id) => _paused[id] == true && !_tokens.containsKey(id);
 static Movie? movieOf(String id) => _movies[id];
@@ -585,6 +605,8 @@ return false;
 }
 }
 _movies[id] = m;
+Store.setPendingDownload(id, m.toJson());
+_keepAlive(true);
 _paused[id] = false;
 _cancelled[id] = false;
 _received[id] = 0;
@@ -629,6 +651,7 @@ progress.value = {...progress.value, id: pct};
 }
 await sink.close();
 await Store.addDownload(m, path);
+await Store.removePendingDownload(id);
 _removeAll(id);
 } catch (_) {
 try {
@@ -636,6 +659,7 @@ await sink?.close();
 } catch (_) {}
 if (_cancelled[id] == true) {
 if (path != null) await deleteFile(path);
+Store.removePendingDownload(id);
 _removeAll(id);
 } else if (_paused[id] == true) {
 _tokens.remove(id);
@@ -657,6 +681,7 @@ final m = _movies[id];
 if (m == null || isActive(id)) return;
 _paused[id] = false;
 _cancelled[id] = false;
+_keepAlive(true);
 tick.value++;
 await _run(m, _received[id] ?? 0);
 }
@@ -667,16 +692,38 @@ _tokens.remove(id)?.cancel();
 if (!isActive(id)) _removeAll(id);
 tick.value++;
 }
+/* ✅ استئناف التحميلات المتقطعة (بعد قتل التطبيق) */
+static Future<void> resumePending() async {
+final p = Store.pendingDownloads();
+for (final e in p.entries.toList()) {
+if (isActive(e.key)) continue;
+final m = Movie.fromJson(Map<String, dynamic>.from(e.value));
+_movies[e.key] = m;
+_paused[e.key] = false;
+_cancelled[e.key] = false;
+final name = m.title.replaceAll(RegExp(r'[^\w\u0600-\u06FF\- ]'), '').trim();
+final f = File('${await _dir()}/$name.mp4');
+int off = 0;
+try { if (await f.exists()) off = await f.length(); } catch (_) {}
+_received[e.key] = off;
+progress.value = {...progress.value, e.key: 0.0};
+tick.value++;
+_keepAlive(true);
+_run(m, off);
+}
+}
 static void _removeAll(String id) {
 _tokens.remove(id);
 _paused.remove(id);
 _cancelled.remove(id);
 _received.remove(id);
 _movies.remove(id);
+if (_movies.isEmpty) _keepAlive(false);
 progress.value = {...progress.value}..remove(id);
 tick.value++;
 }
 }
+
 class Tmdb {
 static const String apiKey = '9ba4e29354937364c2202857afcd7f94';
 static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
@@ -731,6 +778,7 @@ return {
 return null;
 }
 }
+
 class Smart {
 static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 8), receiveTimeout: const Duration(seconds: 8)));
 static Future<List<Map<String, dynamic>>> popular() async {
@@ -791,6 +839,7 @@ return MapEntry(m, s);
 return scored.take(10).map((e) => e.key).toList();
 }
 }
+
 class Sorter {
 static List<Movie> apply(List<Movie> src, String mode) {
 final l = List<Movie>.from(src);
@@ -809,7 +858,7 @@ case 'size_desc':
 l.sort((a, b) => b.sizeMb.compareTo(a.sizeMb));
 break;
 case 'size_asc':
-l.sort((a, b) => a.sizeMb.compareTo(a.sizeMb));
+l.sort((a, b) => a.sizeMb.compareTo(b.sizeMb));
 break;
 case 'smart':
 final genreW = <String, int>{};
@@ -837,11 +886,10 @@ l.sort((a, b) => b.date.compareTo(a.date));
 return l;
 }
 }
-/* ============================================================
-   ✅ نظام التصنيف الصارم للسلاسل (محلي 100% - بدون AI/TMDB)
-   المطابقة "مضغوطة": تتجاهل المسافات والفواصل والأخطاء والالتصاق
-   ============================================================ */
 
+/* ============================================================
+   ✅ نظام التصنيف الصارم للسلاسل (محلي 100%)
+   ============================================================ */
 class SeriesRegistry {
 static final Map<String, List<Movie>> parts = {};
 static final Map<String, String> names = {};
@@ -851,19 +899,19 @@ static int count(String id) => parts[id]?.length ?? 0;
 }
 
 class FranchiseDB {
-/* [اسم السلسلة, ...أنماط مضغوطة بدون مسافات] */
+static String compress(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 static const List<List<String>> _raw = [
-['عالم مارفل السينمائي', 'avengers', 'ironman', 'captainamerica', 'blackwidow', 'doctorstrange', 'guardiansofthegalaxy', 'antman', 'blackpanther', 'shangchi', 'eternals', 'wintersoldier', 'civilwar', 'infinitywar', 'endgame', 'ageofultron', 'firstavenger'],
+['عالم مارفل السينمائي', 'avengers', 'ironman', 'captainamerica', 'thor', 'blackwidow', 'doctorstrange', 'guardiansofthegalaxy', 'antman', 'blackpanther', 'shangchi', 'eternals', 'wintersoldier', 'civilwar', 'infinitywar', 'endgame', 'ageofultron', 'firstavenger'],
 ['حرب النجوم', 'starwars', 'mandalorian', 'rogueone', 'bobafett', 'ahsoka', 'obiwan', 'clonewars'],
-['هاري بوتر / العالم السحري', 'harrypotter', 'wizardingworld', 'fantasticbeasts', 'hogwarts'],
-['سيد الخواتم والهوبيت', 'lordoftherings', 'thehobbit', 'hobbit', 'fellowship', 'twotowers', 'returnoftheking', 'ringsofpower'],
-['عالم دي سي السينمائي', 'batman', 'superman', 'wonderwoman', 'aquaman', 'justiceleague', 'suicidesquad', 'shazam', 'manofsteel', 'harleyquinn', 'birdsofprey', 'blackadam', 'theflash'],
+['هاري بوتر', 'harrypotter', 'wizardingworld', 'fantasticbeasts', 'hogwarts'],
+['سيد الخواتم والهوبيت', 'lordoftherings', 'thehobbit', 'fellowship', 'twotowers', 'returnoftheking', 'ringsofpower'],
+['عالم دي سي', 'batman', 'superman', 'wonderwoman', 'aquaman', 'justiceleague', 'suicidesquad', 'shazam', 'manofsteel', 'harleyquinn', 'birdsofprey', 'blackadam', 'theflash'],
 ['الماتريكس', 'matrix'],
 ['ترميناتور', 'terminator'],
 ['إكس-من', 'xmen', 'wolverine', 'deadpool'],
 ['أفاتار', 'avatar', 'thewayofwater'],
 ['كوكب القردة', 'planetoftheapes', 'riseoftheplanet', 'dawnoftheplanet', 'warfortheplanet', 'kingdomoftheplanet'],
-['أليين / الفضائي', 'aliencovenant', 'alienromulus', 'alien', 'prometheus'],
+['أليين', 'aliencovenant', 'alienromulus', 'alien', 'prometheus'],
 ['بريداتور', 'predator'],
 ['كثيب', 'dune'],
 ['ستار تريك', 'startrek'],
@@ -871,8 +919,8 @@ static const List<List<String>> _raw = [
 ['بليد رانر', 'bladerunner'],
 ['غوستبوسترز', 'ghostbusters'],
 ['رجال ذوو لباس أسود', 'meninblack'],
-['سبايدرمان', 'spiderman', 'spiderman', 'venom', 'morbius', 'madameweb', 'spiderverse'],
-['غودزيلا وكونغ / عالم الوحوش', 'godzilla', 'kong', 'monsterverse', 'skullisland', 'kingkong'],
+['سبايدرمان', 'spiderman', 'venom', 'morbius', 'madameweb', 'spiderverse'],
+['عالم الوحوش', 'godzilla', 'kong', 'monsterverse', 'skullisland', 'kingkong'],
 ['سجلات ريديك', 'riddick', 'pitchblack'],
 ['هيل بوي', 'hellboy'],
 ['بليد', 'blade'],
@@ -883,8 +931,8 @@ static const List<List<String>> _raw = [
 ['ألعاب الجوع', 'hungergames', 'catchingfire', 'mockingjay'],
 ['ملحمة الشفق', 'twilight', 'newmoon', 'breakingdawn'],
 ['المختلفة', 'divergent', 'insurgent', 'allegiant'],
-['عدّاء المتاهة', 'mazerunner', 'scorchtrials', 'deathcure'],
-['سجلات نارنيا', 'narnia'],
+['عداء المتاهة', 'mazerunner', 'scorchtrials', 'deathcure'],
+['نارنيا', 'narnia'],
 ['بيرسي جاكسون', 'percyjackson'],
 ['المواد المظلمة', 'hisdarkmaterials', 'goldencompass'],
 ['تومب رايدر', 'tombraider', 'laracroft'],
@@ -893,15 +941,15 @@ static const List<List<String>> _raw = [
 ['سين سيتي', 'sincity'],
 ['كيك-أس', 'kickass'],
 ['القاضي دريد', 'dredd'],
-['جيمس بوند 007', 'jamesbond', '007', 'skyfall', 'spectre', 'notimetodie', 'goldfinger', 'thunderball', 'goldeneye', 'casinoroyale', 'quantumofsolace', 'dieanotherday', 'tomorrowneverdies', 'octopussy', 'moonraker', 'fromrussiawithlove', 'drno'],
+['جيمس بوند', 'jamesbond', '007', 'skyfall', 'spectre', 'notimetodie', 'goldfinger', 'thunderball', 'goldeneye', 'casinoroyale', 'quantumofsolace', 'dieanotherday', 'tomorrowneverdies', 'octopussy', 'moonraker', 'fromrussiawithlove', 'drno'],
 ['السريع والغاضب', 'fastandfurious', 'fastfurious', 'thefastandthefurious', 'thefateofthefurious', 'furious7', 'fastx', 'f9', '2fast', 'tokyodrift', 'hobbsandshaw', 'hobbsshaw'],
-['الحديقة الجوراسية', 'jurassicpark', 'jurassicworld', 'jurassic', 'thelostworld'],
+['الجوراسي', 'jurassicpark', 'jurassicworld', 'jurassic', 'thelostworld'],
 ['قراصنة الكاريبي', 'piratesofthecaribbean', 'piratesofcaribbean', 'blackpearl', 'deadmanschest', 'atworldsend', 'onstrangertides', 'deadmentellnotales'],
 ['مهمة مستحيلة', 'missionimpossible', 'ghostprotocol', 'roguenation', 'fallout', 'deadreckoning'],
 ['إنديانا جونز', 'indianajones', 'raidersofthelostark', 'lastcrusade', 'crystalskull', 'dialofdestiny'],
 ['المتحولون', 'transformers', 'bumblebee'],
 ['جون ويك', 'johnwick'],
-['جيسون بورن', 'bourne', 'jasonbourne'],
+['بورن', 'bourne', 'jasonbourne'],
 ['داي هارد', 'diehard'],
 ['ماد ماكس', 'madmax', 'furyroad'],
 ['رامبو', 'rambo', 'firstblood'],
@@ -916,12 +964,12 @@ static const List<List<String>> _raw = [
 ['ساعة الزحام', 'rushhour'],
 ['الكنز الوطني', 'nationaltreasure'],
 ['المرتزقة', 'expendables'],
-['سقوط البيت الأبيض/لندن', 'hasfallen', 'olympushasfallen', 'londonhasfallen', 'angelhasfallen'],
+['سقوط', 'hasfallen', 'olympushasfallen', 'londonhasfallen', 'angelhasfallen'],
 ['كرانك', 'crank'],
 ['شيرلوك هولمز', 'sherlockholmes'],
 ['جوماندجي', 'jumanji'],
 ['كيك بكسر', 'kickboxer'],
-['بلا رحمة / بويكا', 'undisputed', 'boyka'],
+['بويكا', 'undisputed', 'boyka'],
 ['جاك ريتشر', 'jackreacher', 'nevergoback'],
 ['توب غن', 'topgun', 'maverick'],
 ['خطة هروب', 'escapeplan'],
@@ -937,22 +985,22 @@ static const List<List<String>> _raw = [
 ['إيب مان', 'ipman', 'yipman'],
 ['أونغ باك', 'ongbak'],
 ['الغارة', 'theraid'],
-['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devilmademedoit', 'lallorona'],
-['سو / المنشار', 'jigsaw', 'saw'],
+['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devil mademedoit', 'lallorona'],
+['سو', 'jigsaw', 'saw'],
 ['هالوين', 'halloween'],
-['كابوس في شارع إلم', 'nightmareonelmstreet', 'elmstreet'],
+['شارع إلم', 'nightmareonelmstreet', 'elmstreet'],
 ['الجمعة الثالث عشر', 'fridaythe13th', 'fridaythe13'],
 ['صرخة', 'scream'],
 ['الوجهة النهائية', 'finaldestination'],
 ['ريزيدنت إيفل', 'residentevil'],
 ['نشاط خارق', 'paranormalactivity'],
-['غدار / إنسيديوس', 'insidious'],
+['إنسيديوس', 'insidious'],
 ['التطهير', 'purge', 'foreverpurge', 'firstpurge'],
 ['مكان هادئ', 'quietplace', 'aquietplace'],
-['لعبة الطفل / تشاكي', 'childsplay', 'chucky'],
-['مجزرة منشار تكساس', 'texaschainsaw', 'chainsaw'],
-['هانيبال ليكتر', 'hannibal', 'silenceofthelambs', 'reddragon'],
-['إت / الشيء', 'itchapter', 'pennywise'],
+['تشاكي', 'childsplay', 'chucky'],
+['مجزرة تكساس', 'texaschainsaw', 'chainsaw'],
+['هانيبال', 'hannibal', 'silenceofthelambs', 'reddragon'],
+['إت', 'itchapter', 'pennywise'],
 ['حلقة', 'thering', 'rings'],
 ['الضغينة', 'grudge', 'thegrudge'],
 ['طارد الأرواح', 'exorcist'],
@@ -961,9 +1009,9 @@ static const List<List<String>> _raw = [
 ['كانديمان', 'candyman'],
 ['هيلرايزر', 'hellraiser'],
 ['شارع الخوف', 'fearstreet'],
-['اليتيمة', 'orphan'],
-['ليلة الموتى الأحياء', 'nightofthelivingdead', 'livingdead', 'dayofthedead', 'dawnofthedead'],
-['28 يوماً بعد', '28dayslater', '28weekslater', '28yearslater'],
+['اليتيمة', 'orphan', 'orphanfirstkill'],
+['ليلة الموتى', 'nightofthelivingdead', 'livingdead', 'dayofthedead', 'dawnofthedead'],
+['28 يوماً', '28dayslater', '28weekslater', '28yearslater'],
 ['العالم السفلي', 'underworld'],
 ['جيبرز كريبرز', 'jeeperscreepers'],
 ['ابتسامة', 'smile'],
@@ -979,15 +1027,15 @@ static const List<List<String>> _raw = [
 ['الأطفال الخاطئون', 'childrenofthecorn'],
 ['زومبي لاند', 'zombieland'],
 ['العراب', 'godfather'],
-['روكي / كريد', 'rocky', 'creed'],
-['ثلاثية فارس الظلام', 'darkknight', 'batmanbegins'],
+['روكي', 'rocky', 'creed'],
+['فارس الظلام', 'darkknight', 'batmanbegins'],
 ['ثلاثية الدولارات', 'goodthebadandtheugly', 'forafewdollarsmore', 'fistfulofdollars'],
 ['غير قابل للكسر', 'unbreakable', 'glass'],
 ['ثلاثية قبل', 'beforesunrise', 'beforesunset', 'beforemidnight'],
 ['أقتل بيل', 'killbill'],
 ['سايكو', 'psycho'],
 ['سيكاريو', 'sicario'],
-['ثلاثية كورنيتو', 'shaunofthedead', 'hotfuzz', 'theworldsend'],
+['كورنيتو', 'shaunofthedead', 'hotfuzz', 'theworldsend'],
 ['الشؤون الجهنمية', 'infernalaffairs'],
 ['خمسون ظلاً', 'fiftyshades', 'fiftyshadesofgrey'],
 ['المحقق دي', 'detectivedee'],
@@ -998,7 +1046,7 @@ static const List<List<String>> _raw = [
 ['الملك آرثر', 'kingarthur'],
 ['بوندوك سانتس', 'boondocksaints'],
 ['حكاية لعبة', 'toystory'],
-['أنا الحقير / المينيونز', 'despicableme', 'minions'],
+['أنا الحقير', 'despicableme', 'minions'],
 ['شريك', 'shrek'],
 ['العصر الجليدي', 'iceage'],
 ['كونغ فو باندا', 'kungfupanda'],
@@ -1006,13 +1054,13 @@ static const List<List<String>> _raw = [
 ['مدغشقر', 'madagascar'],
 ['سيارات', 'cars2', 'cars3'],
 ['الخارقون', 'incredibles'],
-['البحث عن نيمو/دوري', 'findingnemo', 'findingdory'],
+['البحث عن نيمو', 'findingnemo', 'findingdory'],
 ['شركة المرعبين', 'monstersinc', 'monstersuniversity'],
 ['الأسد الملك', 'lionking'],
 ['فروزن', 'frozen'],
 ['فندق ترانسيلفانيا', 'hoteltransylvania'],
 ['السنافر', 'smurfs'],
-['ألفين والسنجاب', 'chipmunks'],
+['ألفين', 'chipmunks'],
 ['بادينغتون', 'paddington'],
 ['أبطال التايتنز', 'teentitans'],
 ['سبونج بوب', 'spongebob'],
@@ -1020,7 +1068,7 @@ static const List<List<String>> _raw = [
 ['الطيور الغاضبة', 'angrybirds'],
 ['الحياة السرية للحيوانات', 'secretlifeofpets'],
 ['رالف المحطم', 'wreckitralph', 'ralphbreakstheinternet'],
-['غيوم مع احتمال كرات لحم', 'cloudywithachanceofmeatballs'],
+['غيوم', 'cloudywithachanceofmeatballs'],
 ['ريو', 'rio2', 'rio3'],
 ['موسم الصيد', 'openseason'],
 ['غنوا', 'sing2'],
@@ -1029,7 +1077,7 @@ static const List<List<String>> _raw = [
 ['وان بيس', 'onepiece'],
 ['وحدي في المنزل', 'homealone'],
 ['ليلة في المتحف', 'nightatthemuseum'],
-['ذا هانغ أوفر', 'hangover'],
+['هانغ أوفر', 'hangover'],
 ['الفطيرة الأمريكية', 'americanpie'],
 ['فيلم مرعب', 'scarymovie'],
 ['أوستن باورز', 'austinpowers'],
@@ -1039,37 +1087,31 @@ static const List<List<String>> _raw = [
 ['عائلة الفوكيرز', 'meettheparents', 'meetthefockers'],
 ['دكتور دوليتل', 'dolittle'],
 ['الشقراء القانونية', 'legallyblonde'],
-['شرطي بيفرلي هيلز', 'beverlyhillscop'],
+['شرطي بيفرلي', 'beverlyhillscop'],
 ['بيل وتيد', 'billandted'],
-/* ✅ سلاسل إضافية من قناتك */
 ['سلسلة أفتر', 'afterwe', 'afterever', 'aftereverything', 'after'],
-['خطيئة / ذنبنا', 'culpamia', 'myfault', 'yourfault', 'ourfault'],
+['خطيئة', 'culpamia', 'myfault', 'yourfault', 'ourfault'],
 ['تيريفاير', 'terrifier'],
 ['المنعطف الخاطئ', 'wrongturn'],
 ['التلال لها عيون', 'hillshaveeyes'],
 ['وولف كريك', 'wolfcreek'],
 ['سجين', 'siccin'],
 ['جرينلاند', 'greenland'],
-['وورلد وار زيد', 'worldwarz', 'worldwarz'],
+['وورلد وار', 'worldwarz', 'worldwarz'],
 ];
-
-static String compress(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-
-static List<MapEntry<String, String>>? _sorted;
+static List<MapEntry<String, String>>? _index;
 static List<MapEntry<String, String>> _ensure() {
-if (_sorted != null) return _sorted!;
+if (_index != null) return _index!;
 final m = <String, String>{};
 for (final e in _raw) {
 for (var i = 1; i < e.length; i++) {
-m[e[i]] = e[0];
+m.putIfAbsent(e[i], e[0]);
 }
 }
 final l = m.entries.toList()..sort((a, b) => b.key.length.compareTo(a.key.length));
-_sorted = l;
+_index = l;
 return l;
 }
-
-/// إيجاد السلسلة: الأطول أولاً لتجنب التطابقات الخاطئة
 static String? match(String title) {
 final t = compress(title.split('\n').first);
 if (t.length < 3) return null;
@@ -1106,35 +1148,57 @@ final b = seriesBase(m.title);
 return b.isEmpty ? m.title : b.replaceAll('_', ' ');
 }
 
-/// للتوافق — لا يفعل شيئاً الآن (التصنيف فوري ومحلي)
-Future<void> verifySeries() async {}
+/* ✅ للتوافق مع الشاشات القديمة */
+Future<void> verifySeries() async {
+Store.tick.value++;
+}
 
-/// التجميع الصارم: سلسلة فقط إذا طابقت قاعدة البيانات
+class SeriesItem {
+final bool isSeries;
+final Movie? movie;
+final String? seriesTitle;
+final List<Movie>? parts;
+SeriesItem.movie(this.movie) : isSeries = false, seriesTitle = null, parts = null;
+SeriesItem.series(this.seriesTitle, this.parts) : isSeries = true, movie = null;
+}
+
+String extractSeriesBase(String title) => FranchiseDB.compress(title.split('\n').first);
+
+List<SeriesItem> groupMoviesWithSeries(List<Movie> all) {
+final items = groupMoviesSmart(all);
+return items.map((m) {
+if (SeriesRegistry.isSeries(m.id)) {
+return SeriesItem.series(seriesDisplayName(m), SeriesRegistry.partsOf(m.id));
+}
+return SeriesItem.movie(m);
+}).toList();
+}
+
+/* ✅ التجميع الصارم النهائي */
 List<Movie> groupMoviesSmart(List<Movie> all) {
 SeriesRegistry.parts.clear();
 SeriesRegistry.names.clear();
 final deduped = Smart.dedup(all);
 final groups = <String, List<Movie>>{};
-final singles = <Movie>[];
+final result = <Movie>[];
 for (final m in deduped) {
 final f = FranchiseDB.match(m.title);
 if (f == null) {
-singles.add(m);
+result.add(m);
 continue;
 }
 groups.putIfAbsent(f, () => []).add(m);
 }
-final result = <Movie>[...singles];
-for (final entry in groups.entries) {
-if (entry.value.length >= 2) {
-final list = List<Movie>.from(entry.value)..sort((a, b) => (a.year == b.year) ? a.msgId.compareTo(b.msgId) : a.year.compareTo(b.year));
+for (final e in groups.entries) {
+if (e.value.length >= 2) {
+final list = List<Movie>.from(e.value)..sort((a, b) => (a.year == b.year) ? a.msgId.compareTo(b.msgId) : a.year.compareTo(b.year));
 for (final m in list) {
 SeriesRegistry.parts[m.id] = list;
-SeriesRegistry.names[m.id] = entry.key;
+SeriesRegistry.names[m.id] = e.key;
 }
 result.add(list.first);
 } else {
-result.add(entry.value.first);
+result.add(e.value.first);
 }
 }
 result.sort((a, b) => b.date.compareTo(a.date));
