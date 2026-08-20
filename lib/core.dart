@@ -895,7 +895,7 @@ static const List<List<String>> _raw = [
 ['السريع والغاضب', 'fastandfurious', 'fastfurious', 'thefastandthefurious', 'thefateofthefurious', 'furious7', 'fastx', 'f9', '2fast', 'tokyodrift', 'hobbsandshaw', 'hobbsshaw'],
 ['الحديقة الجوراسية', 'jurassicpark', 'jurassicworld', 'jurassic', 'thelostworld'],
 ['قراصنة الكاريبي', 'piratesofthecaribbean', 'piratesofcaribbean', 'blackpearl', 'deadmanschest', 'atworldsend', 'onstrangertides', 'deadmentellnotales'],
-['مهمة مستحيلة', 'missionimpossible', 'ghostprotocol', 'rogue nation'.replaceAll(' ', ''), 'fallout', 'deadreckoning'],
+['مهمة مستحيلة', 'missionimpossible', 'ghostprotocol', 'roguenation', 'fallout', 'deadreckoning'],
 ['إنديانا جونز', 'indianajones', 'raidersofthelostark', 'lastcrusade', 'crystalskull', 'dialofdestiny'],
 ['المتحولون', 'transformers', 'bumblebee'],
 ['جون ويك', 'johnwick'],
@@ -935,7 +935,7 @@ static const List<List<String>> _raw = [
 ['إيب مان', 'ipman', 'yipman'],
 ['أونغ باك', 'ongbak'],
 ['الغارة', 'theraid'],
-['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devil mademedoit', 'la llorona'.replaceAll(' ', '')],
+['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devilmademedoit', 'lallorona'],
 ['سو / المنشار', 'jigsaw', 'saw'],
 ['هالوين', 'halloween'],
 ['كابوس في شارع إلم', 'nightmareonelmstreet', 'elmstreet'],
@@ -1059,7 +1059,7 @@ if (_sorted != null) return _sorted!;
 final m = <String, String>{};
 for (final e in _raw) {
 for (var i = 1; i < e.length; i++) {
-m.putIfAbsent(e[i], e[0]);
+m[e[i]] = e[0];
 }
 }
 final l = m.entries.toList()..sort((a, b) => b.key.length.compareTo(a.key.length));
