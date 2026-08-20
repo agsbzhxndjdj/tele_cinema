@@ -836,8 +836,10 @@ return l;
 }
 }
 /* ============================================================
-   ✅ السلاسل الذكية عبر Gemini AI (سريع ومجاني)
+   ✅ نظام التصنيف الصارم للسلاسل (محلي 100% - بدون AI/TMDB)
+   المطابقة "مضغوطة": تتجاهل المسافات والفواصل والأخطاء والالتصاق
    ============================================================ */
+
 class SeriesRegistry {
 static final Map<String, List<Movie>> parts = {};
 static final Map<String, String> names = {};
@@ -846,113 +848,233 @@ static List<Movie> partsOf(String id) => parts[id] ?? [];
 static int count(String id) => parts[id]?.length ?? 0;
 }
 
-class AiClassifier {
-/* ⬇️⬇️ ضع مفتاحك هنا مقسّماً (لتجاوز فحص GitHub) ⬇️⬇️ */
-static String get geminiKey => 'AQ' + '.Ab8RN6I9gRkdClNvBTW43DW5M0SjHqiBZrHTvn37cDzNH0JjBQ';
-/* ✅ النموذج: سريع + مجاني + ذكي */
-static const List<String> _models = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-lite'];
-static final Dio _d = Dio(BaseOptions(connectTimeout: const Duration(seconds: 30), receiveTimeout: const Duration(seconds: 90)));
-static bool _busy = false;
-static Map<String, List<String>> seriesGroups = {};
-static List<List<String>> sameGroups = [];
-static bool get enabled => !geminiKey.contains('ضع_باقي');
+class FranchiseDB {
+/* [اسم السلسلة, ...أنماط مضغوطة بدون مسافات] */
+static const List<List<String>> _raw = [
+['عالم مارفل السينمائي', 'avengers', 'ironman', 'captainamerica', 'blackwidow', 'doctorstrange', 'guardiansofthegalaxy', 'antman', 'blackpanther', 'shangchi', 'eternals', 'wintersoldier', 'civilwar', 'infinitywar', 'endgame', 'ageofultron', 'firstavenger'],
+['حرب النجوم', 'starwars', 'mandalorian', 'rogueone', 'bobafett', 'ahsoka', 'obiwan', 'clonewars'],
+['هاري بوتر / العالم السحري', 'harrypotter', 'wizardingworld', 'fantasticbeasts', 'hogwarts'],
+['سيد الخواتم والهوبيت', 'lordoftherings', 'thehobbit', 'hobbit', 'fellowship', 'twotowers', 'returnoftheking', 'ringsofpower'],
+['عالم دي سي السينمائي', 'batman', 'superman', 'wonderwoman', 'aquaman', 'justiceleague', 'suicidesquad', 'shazam', 'manofsteel', 'harleyquinn', 'birdsofprey', 'blackadam', 'theflash'],
+['الماتريكس', 'matrix'],
+['ترميناتور', 'terminator'],
+['إكس-من', 'xmen', 'wolverine', 'deadpool'],
+['أفاتار', 'avatar', 'thewayofwater'],
+['كوكب القردة', 'planetoftheapes', 'riseoftheplanet', 'dawnoftheplanet', 'warfortheplanet', 'kingdomoftheplanet'],
+['أليين / الفضائي', 'aliencovenant', 'alienromulus', 'alien', 'prometheus'],
+['بريداتور', 'predator'],
+['كثيب', 'dune'],
+['ستار تريك', 'startrek'],
+['ترون', 'tronlegacy', 'tron'],
+['بليد رانر', 'bladerunner'],
+['غوستبوسترز', 'ghostbusters'],
+['رجال ذوو لباس أسود', 'meninblack'],
+['سبايدرمان', 'spiderman', 'spiderman', 'venom', 'morbius', 'madameweb', 'spiderverse'],
+['غودزيلا وكونغ / عالم الوحوش', 'godzilla', 'kong', 'monsterverse', 'skullisland', 'kingkong'],
+['سجلات ريديك', 'riddick', 'pitchblack'],
+['هيل بوي', 'hellboy'],
+['بليد', 'blade'],
+['الفانتاستك فور', 'fantasticfour'],
+['روبوكوب', 'robocop'],
+['العودة إلى المستقبل', 'backtothefuture'],
+['باسيفيك ريم', 'pacificrim'],
+['ألعاب الجوع', 'hungergames', 'catchingfire', 'mockingjay'],
+['ملحمة الشفق', 'twilight', 'newmoon', 'breakingdawn'],
+['المختلفة', 'divergent', 'insurgent', 'allegiant'],
+['عدّاء المتاهة', 'mazerunner', 'scorchtrials', 'deathcure'],
+['سجلات نارنيا', 'narnia'],
+['بيرسي جاكسون', 'percyjackson'],
+['المواد المظلمة', 'hisdarkmaterials', 'goldencompass'],
+['تومب رايدر', 'tombraider', 'laracroft'],
+['مورتال كومبات', 'mortalkombat'],
+['سلاحف النينجا', 'tmnt', 'ninjaturtles', 'mutantturtles'],
+['سين سيتي', 'sincity'],
+['كيك-أس', 'kickass'],
+['القاضي دريد', 'dredd'],
+['جيمس بوند 007', 'jamesbond', '007', 'skyfall', 'spectre', 'notimetodie', 'goldfinger', 'thunderball', 'goldeneye', 'casinoroyale', 'quantumofsolace', 'dieanotherday', 'tomorrowneverdies', 'octopussy', 'moonraker', 'fromrussiawithlove', 'drno'],
+['السريع والغاضب', 'fastandfurious', 'fastfurious', 'thefastandthefurious', 'thefateofthefurious', 'furious7', 'fastx', 'f9', '2fast', 'tokyodrift', 'hobbsandshaw', 'hobbsshaw'],
+['الحديقة الجوراسية', 'jurassicpark', 'jurassicworld', 'jurassic', 'thelostworld'],
+['قراصنة الكاريبي', 'piratesofthecaribbean', 'piratesofcaribbean', 'blackpearl', 'deadmanschest', 'atworldsend', 'onstrangertides', 'deadmentellnotales'],
+['مهمة مستحيلة', 'missionimpossible', 'ghostprotocol', 'rogue nation'.replaceAll(' ', ''), 'fallout', 'deadreckoning'],
+['إنديانا جونز', 'indianajones', 'raidersofthelostark', 'lastcrusade', 'crystalskull', 'dialofdestiny'],
+['المتحولون', 'transformers', 'bumblebee'],
+['جون ويك', 'johnwick'],
+['جيسون بورن', 'bourne', 'jasonbourne'],
+['داي هارد', 'diehard'],
+['ماد ماكس', 'madmax', 'furyroad'],
+['رامبو', 'rambo', 'firstblood'],
+['كينغزمان', 'kingsman'],
+['المومياء', 'mummy'],
+['ذا إكوالايزر', 'equalizer'],
+['تاكن', 'taken'],
+['الناقل', 'transporter', 'transporterrefueled'],
+['أوشنز', 'oceans11', 'oceans12', 'oceans13', 'oceanseight', 'oceanseleven', 'oceanstwelve', 'oceansthirteen'],
+['فتيان أشرار', 'badboys', 'rideordie'],
+['السلاح القاتل', 'lethalweapon'],
+['ساعة الزحام', 'rushhour'],
+['الكنز الوطني', 'nationaltreasure'],
+['المرتزقة', 'expendables'],
+['سقوط البيت الأبيض/لندن', 'hasfallen', 'olympushasfallen', 'londonhasfallen', 'angelhasfallen'],
+['كرانك', 'crank'],
+['شيرلوك هولمز', 'sherlockholmes'],
+['جوماندجي', 'jumanji'],
+['كيك بكسر', 'kickboxer'],
+['بلا رحمة / بويكا', 'undisputed', 'boyka'],
+['جاك ريتشر', 'jackreacher', 'nevergoback'],
+['توب غن', 'topgun', 'maverick'],
+['خطة هروب', 'escapeplan'],
+['الميكانيكي', 'mechanic'],
+['جي آي جو', 'gijoe'],
+['إكس إكس إكس', 'xandercage', 'xxxreturn'],
+['الآن تراني', 'nowyouseeme'],
+['زورو', 'zorro'],
+['أطفال أسطوريون', 'spykids'],
+['كلوفر فيلد', 'cloverfield', '10cloverfieldlane'],
+['إكستراكشن', 'extraction'],
+['ديرتي هاري', 'dirtyharry'],
+['إيب مان', 'ipman', 'yipman'],
+['أونغ باك', 'ongbak'],
+['الغارة', 'theraid'],
+['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devil mademedoit', 'la llorona'.replaceAll(' ', '')],
+['سو / المنشار', 'jigsaw', 'saw'],
+['هالوين', 'halloween'],
+['كابوس في شارع إلم', 'nightmareonelmstreet', 'elmstreet'],
+['الجمعة الثالث عشر', 'fridaythe13th', 'fridaythe13'],
+['صرخة', 'scream'],
+['الوجهة النهائية', 'finaldestination'],
+['ريزيدنت إيفل', 'residentevil'],
+['نشاط خارق', 'paranormalactivity'],
+['غدار / إنسيديوس', 'insidious'],
+['التطهير', 'purge', 'foreverpurge', 'firstpurge'],
+['مكان هادئ', 'quietplace', 'aquietplace'],
+['لعبة الطفل / تشاكي', 'childsplay', 'chucky'],
+['مجزرة منشار تكساس', 'texaschainsaw', 'chainsaw'],
+['هانيبال ليكتر', 'hannibal', 'silenceofthelambs', 'reddragon'],
+['إت / الشيء', 'itchapter', 'pennywise'],
+['حلقة', 'thering', 'rings'],
+['الضغينة', 'grudge', 'thegrudge'],
+['طارد الأرواح', 'exorcist'],
+['ساحرة بلير', 'blairwitch'],
+['الشر المميت', 'evildead', 'armyofdarkness'],
+['كانديمان', 'candyman'],
+['هيلرايزر', 'hellraiser'],
+['شارع الخوف', 'fearstreet'],
+['اليتيمة', 'orphan'],
+['ليلة الموتى الأحياء', 'nightofthelivingdead', 'livingdead', 'dayofthedead', 'dawnofthedead'],
+['28 يوماً بعد', '28dayslater', '28weekslater', '28yearslater'],
+['العالم السفلي', 'underworld'],
+['جيبرز كريبرز', 'jeeperscreepers'],
+['ابتسامة', 'smile'],
+['الغرباء', 'thestrangers'],
+['تأثير الفراشة', 'butterflyeffect'],
+['المكعب', 'cube'],
+['غرفة الهروب', 'escaperoom'],
+['لا تتنفس', 'dontbreathe'],
+['سايلنت هيل', 'silenthill'],
+['هوستل', 'hostel'],
+['سرعة', 'speed'],
+['أمتيفيل', 'amityville'],
+['الأطفال الخاطئون', 'childrenofthecorn'],
+['زومبي لاند', 'zombieland'],
+['العراب', 'godfather'],
+['روكي / كريد', 'rocky', 'creed'],
+['ثلاثية فارس الظلام', 'darkknight', 'batmanbegins'],
+['ثلاثية الدولارات', 'goodthebadandtheugly', 'forafewdollarsmore', 'fistfulofdollars'],
+['غير قابل للكسر', 'unbreakable', 'glass'],
+['ثلاثية قبل', 'beforesunrise', 'beforesunset', 'beforemidnight'],
+['أقتل بيل', 'killbill'],
+['سايكو', 'psycho'],
+['سيكاريو', 'sicario'],
+['ثلاثية كورنيتو', 'shaunofthedead', 'hotfuzz', 'theworldsend'],
+['الشؤون الجهنمية', 'infernalaffairs'],
+['خمسون ظلاً', 'fiftyshades', 'fiftyshadesofgrey'],
+['المحقق دي', 'detectivedee'],
+['الجوكر', 'joker'],
+['الوجه ذو الندبة', 'scarface'],
+['مدن الجريمة', 'crimecity', 'theoutlaws'],
+['المجلاد', 'gladiator'],
+['الملك آرثر', 'kingarthur'],
+['بوندوك سانتس', 'boondocksaints'],
+['حكاية لعبة', 'toystory'],
+['أنا الحقير / المينيونز', 'despicableme', 'minions'],
+['شريك', 'shrek'],
+['العصر الجليدي', 'iceage'],
+['كونغ فو باندا', 'kungfupanda'],
+['كيف تدرب تنينك', 'howtotrainyourdragon', 'hiddenworld'],
+['مدغشقر', 'madagascar'],
+['سيارات', 'cars2', 'cars3'],
+['الخارقون', 'incredibles'],
+['البحث عن نيمو/دوري', 'findingnemo', 'findingdory'],
+['شركة المرعبين', 'monstersinc', 'monstersuniversity'],
+['الأسد الملك', 'lionking'],
+['فروزن', 'frozen'],
+['فندق ترانسيلفانيا', 'hoteltransylvania'],
+['السنافر', 'smurfs'],
+['ألفين والسنجاب', 'chipmunks'],
+['بادينغتون', 'paddington'],
+['أبطال التايتنز', 'teentitans'],
+['سبونج بوب', 'spongebob'],
+['غارفيلد', 'garfield'],
+['الطيور الغاضبة', 'angrybirds'],
+['الحياة السرية للحيوانات', 'secretlifeofpets'],
+['رالف المحطم', 'wreckitralph', 'ralphbreakstheinternet'],
+['غيوم مع احتمال كرات لحم', 'cloudywithachanceofmeatballs'],
+['ريو', 'rio2', 'rio3'],
+['موسم الصيد', 'openseason'],
+['غنوا', 'sing2'],
+['بوكيمون', 'pokemon'],
+['دراغون بول', 'dragonball'],
+['وان بيس', 'onepiece'],
+['وحدي في المنزل', 'homealone'],
+['ليلة في المتحف', 'nightatthemuseum'],
+['ذا هانغ أوفر', 'hangover'],
+['الفطيرة الأمريكية', 'americanpie'],
+['فيلم مرعب', 'scarymovie'],
+['أوستن باورز', 'austinpowers'],
+['بريدجيت جونز', 'bridgetjones'],
+['جاكاس', 'jackass'],
+['بيتش بيرفكت', 'pitchperfect'],
+['عائلة الفوكيرز', 'meettheparents', 'meetthefockers'],
+['دكتور دوليتل', 'dolittle'],
+['الشقراء القانونية', 'legallyblonde'],
+['شرطي بيفرلي هيلز', 'beverlyhillscop'],
+['بيل وتيد', 'billandted'],
+/* ✅ سلاسل إضافية من قناتك */
+['سلسلة أفتر', 'afterwe', 'afterever', 'aftereverything', 'after'],
+['خطيئة / ذنبنا', 'culpamia', 'myfault', 'yourfault', 'ourfault'],
+['تيريفاير', 'terrifier'],
+['المنعطف الخاطئ', 'wrongturn'],
+['التلال لها عيون', 'hillshaveeyes'],
+['وولف كريك', 'wolfcreek'],
+['سجين', 'siccin'],
+['جرينلاند', 'greenland'],
+['وورلد وار زيد', 'worldwarz', 'worldwarz'],
+];
 
-static String _sig() {
-final all = Store.all();
-if (all.isEmpty) return '';
-var maxId = 0;
-for (final m in all) if (m.msgId > maxId) maxId = m.msgId;
-return '${all.length}_$maxId';
+static String compress(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+static List<MapEntry<String, String>>? _sorted;
+static List<MapEntry<String, String>> _ensure() {
+if (_sorted != null) return _sorted!;
+final m = <String, String>{};
+for (final e in _raw) {
+for (var i = 1; i < e.length; i++) {
+m.putIfAbsent(e[i], e[0]);
+}
+}
+final l = m.entries.toList()..sort((a, b) => b.key.length.compareTo(a.key.length));
+_sorted = l;
+return l;
 }
 
-static void loadCache() {
-final raw = Store.getString('aiGroups');
-if (raw.isEmpty) return;
-try {
-final j = jsonDecode(raw);
-seriesGroups = (j['series'] as Map? ?? {}).map((k, v) => MapEntry(k.toString(), (v as List).map((e) => e.toString()).toList()));
-sameGroups = (j['same'] as List? ?? []).map((e) => (e as List).map((x) => x.toString()).toList()).toList();
-} catch (_) {}
-}
-
-static Future<String?> _generate(String prompt) async {
-for (final model in _models) {
-try {
-final res = await _d.post(
-'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey',
-data: {
-'contents': [{'parts': [{'text': prompt}]}],
-'generationConfig': {'temperature': 0.1, 'responseMimeType': 'application/json'},
-},
-);
-final pl = res.data['candidates'][0]['content']['parts'] as List;
-final text = pl.map((p) => (p['text'] ?? '').toString()).join('');
-if (text.trim().isNotEmpty) return text;
-} catch (_) {}
+/// إيجاد السلسلة: الأطول أولاً لتجنب التطابقات الخاطئة
+static String? match(String title) {
+final t = compress(title.split('\n').first);
+if (t.length < 3) return null;
+for (final e in _ensure()) {
+if (t.contains(e.key)) return e.value;
 }
 return null;
-}
-
-static Future<void> classify({bool force = false}) async {
-if (!enabled || _busy) return;
-loadCache();
-final sig = _sig();
-if (sig.isEmpty) return;
-if (!force && Store.getString('aiSig') == sig && (seriesGroups.isNotEmpty || sameGroups.isNotEmpty)) return;
-_busy = true;
-try {
-final all = Smart.dedup(Store.all());
-final byNum = <int, String>{};
-final lines = <String>[];
-var n = 0;
-for (final m in all) {
-n++;
-byNum[n] = m.id;
-lines.add('$n|${m.title.split('\n').first}');
-}
-final newSeries = <String, List<String>>{};
-final newSame = <List<String>>[];
-const bs = 300;
-for (var i = 0; i < lines.length; i += bs) {
-final chunk = lines.sublist(i, (i + bs) > lines.length ? lines.length : (i + bs));
-if (chunk.length < 2) continue;
-final prompt = 'You are a movie catalog organizer. Input lines: N|Title.\n'
-'Task "series": group movies that are parts/sequels/spin-offs of the SAME franchise (example: all Pirates of the Caribbean movies, all Maze Runner movies, Fast and Furious including its spin-offs).\n'
-'Task "same": group lines that are the EXACT SAME movie posted more than once (different quality, typo, Arabic or English title of the same film).\n'
-'Never group unrelated movies together. Standalone movies must not appear in any group.\n'
-'Output JSON only:\n'
-'{"series":[{"name":"Pirates of the Caribbean","ids":[1,2]}],"same":[{"ids":[3,4]}]}\n'
-'Movies:\n' + chunk.join('\n');
-final text = await _generate(prompt);
-if (text == null) continue;
-final clean = text.replaceAll('```json', '').replaceAll('```', '').trim();
-try {
-final j = jsonDecode(clean);
-for (final s in (j['series'] as List? ?? [])) {
-final ids = (s['ids'] as List? ?? [])
-.map((e) => int.tryParse(e.toString()) ?? -1)
-.where((x) => byNum.containsKey(x))
-.map((x) => byNum[x]!)
-.toList();
-if (ids.length >= 2) newSeries[(s['name'] ?? 'series').toString()] = ids;
-}
-for (final s in (j['same'] as List? ?? [])) {
-final ids = (s['ids'] as List? ?? [])
-.map((e) => int.tryParse(e.toString()) ?? -1)
-.where((x) => byNum.containsKey(x))
-.map((x) => byNum[x]!)
-.toList();
-if (ids.length >= 2) newSame.add(ids);
-}
-} catch (_) {}
-}
-seriesGroups = newSeries;
-sameGroups = newSame;
-await Store.setString('aiGroups', jsonEncode({'series': newSeries, 'same': newSame}));
-await Store.setString('aiSig', sig);
-Store.tick.value++;
-} catch (_) {}
-_busy = false;
 }
 }
 
@@ -962,7 +1084,6 @@ t = t.replaceAll(RegExp(r'\b(19|20)\d{2}\b'), ' ');
 t = t.replaceAll(RegExp(r'\b(2160p|1080p|720p|480p|360p|4k|uhd|fhd|hd|web-?dl|bluray|hdrip|hdtv|dvdrip|brrip)\b', caseSensitive: false), ' ');
 t = t.replaceAll(RegExp(r'(?:part|جزء|الجزء)\s*:?\s*\S+', caseSensitive: false), ' ');
 t = t.replaceAll(RegExp(r'\b(II|III|IV|V|VI|VII|VIII|IX|X)\b'), ' ');
-t = t.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
 const generic = ['the', 'a', 'an', 'of', 'and', 'in', 'to', 'for', 'on', 'at', 'by', 'with', 'is', 'it', 'from', 'or', 'my', 'your'];
 final words = <String>[];
 for (var w in t.split(RegExp(r'\s+'))) {
@@ -983,62 +1104,38 @@ final b = seriesBase(m.title);
 return b.isEmpty ? m.title : b.replaceAll('_', ' ');
 }
 
-/// للتوافق مع الاستدعاءات القديمة
-Future<void> verifySeries() => AiClassifier.classify();
+/// للتوافق — لا يفعل شيئاً الآن (التصنيف فوري ومحلي)
+Future<void> verifySeries() async {}
 
-/// التجميع النهائي: يعتمد 100% على تصنيف Gemini
+/// التجميع الصارم: سلسلة فقط إذا طابقت قاعدة البيانات
 List<Movie> groupMoviesSmart(List<Movie> all) {
 SeriesRegistry.parts.clear();
 SeriesRegistry.names.clear();
-AiClassifier.loadCache();
 final deduped = Smart.dedup(all);
-final byId = {for (final m in deduped) m.id: m};
-
-/* 1) دمج التكرارات: نفس الفيلم بجودات مختلفة */
-final removeIds = <String>{};
-for (final g in AiClassifier.sameGroups) {
-final movies = g.map((id) => byId[id]).whereType<Movie>().toList();
-if (movies.length < 2) continue;
-movies.sort((a, b) => b.sizeMb.compareTo(a.sizeMb));
-final base = movies.first;
-for (final o in movies.skip(1)) {
-base.absorb(o);
-removeIds.add(o.id);
+final groups = <String, List<Movie>>{};
+final singles = <Movie>[];
+for (final m in deduped) {
+final f = FranchiseDB.match(m.title);
+if (f == null) {
+singles.add(m);
+continue;
 }
+groups.putIfAbsent(f, () => []).add(m);
 }
-final list = deduped.where((m) => !removeIds.contains(m.id)).toList();
-
-/* 2) السلاسل حسب Gemini */
-for (final entry in AiClassifier.seriesGroups.entries) {
-final movies = entry.value
-.map((id) => byId[id])
-.whereType<Movie>()
-.where((m) => !removeIds.contains(m.id))
-.toList();
-if (movies.length < 2) continue;
-movies.sort((a, b) => (a.year == b.year) ? a.msgId.compareTo(b.msgId) : a.year.compareTo(b.year));
-for (final m in movies) {
-SeriesRegistry.parts[m.id] = movies;
+final result = <Movie>[...singles];
+for (final entry in groups.entries) {
+if (entry.value.length >= 2) {
+final list = List<Movie>.from(entry.value)..sort((a, b) => (a.year == b.year) ? a.msgId.compareTo(b.msgId) : a.year.compareTo(b.year));
+for (final m in list) {
+SeriesRegistry.parts[m.id] = list;
 SeriesRegistry.names[m.id] = entry.key;
 }
-}
-
-/* 3) النتيجة: الأفلام العادية + ممثل واحد لكل سلسلة */
-final result = <Movie>[];
-for (final m in list) {
-final parts = SeriesRegistry.parts[m.id];
-if (parts != null) {
-if (parts.first.id == m.id) result.add(m);
+result.add(list.first);
 } else {
-result.add(m);
+result.add(entry.value.first);
 }
 }
 result.sort((a, b) => b.date.compareTo(a.date));
-
-/* ✅ تشغيل التصنيف تلقائياً إذا لا توجد نتيجة محفوظة */
-if (AiClassifier.enabled && AiClassifier.seriesGroups.isEmpty && AiClassifier.sameGroups.isEmpty) {
-AiClassifier.classify();
-}
 return result;
 }
 
