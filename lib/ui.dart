@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'core.dart';
+import 'power.dart';
 import 'lang.dart';
 import 'extra.dart';
 import 'features.dart';
@@ -84,14 +85,22 @@ super.initState();
 if (Store.channels().isNotEmpty && Store.all().isEmpty) _refresh();
 _loadSmart();
 Downloader.wifiBlocked.addListener(_wifiToast);
+/* ✅ إصلاح مشكلة تحديث القنوات: إعادة البناء عند أي تغيير */
+Store.tick.addListener(_tick);
 Future.delayed(const Duration(seconds: 2), () {
 if (mounted) {
 Announce.checkAndShow(context);
 SmartDownload.check();
 }
 });
-/* ✅ التحقق من السلاسل عبر TMDB */
-Future.delayed(const Duration(seconds: 3), () => verifySeries());
+}
+
+/* ✅ يُستدعى عند أي tick: يحدّث القائمة + يعدّاد التكرار */
+void _tick() {
+if (mounted) {
+DupInfo.refresh();
+setState(() {});
+}
 }
 
 void _wifiToast() {
@@ -104,6 +113,7 @@ ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(Lang.t('wifiNe
 @override
 void dispose() {
 Downloader.wifiBlocked.removeListener(_wifiToast);
+Store.tick.removeListener(_tick);
 _scroll.dispose();
 _search.dispose();
 super.dispose();
@@ -128,7 +138,6 @@ for (final c in Store.channels()) {
 await BulkLoader.loadAll(c.username);
 }
 await _loadSmart();
-verifySeries();
 if (mounted) setState(() => _busy = false);
 }
 
@@ -195,8 +204,7 @@ _sortItem('smart', '✨ ذكي (حسب ذوقك)'),
 ),
 IconButton(icon: const Icon(Icons.explore_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
 IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
-IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () async {
-await verifySeries();
+IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () {
 final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
 if (seriesOnly.isEmpty) {
 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
@@ -204,18 +212,22 @@ return;
 }
 Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
 }),
+IconButton(icon: const Icon(Icons.hub_outlined), tooltip: 'أدوات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PowerHub()))),
 IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
-]))], bottom: _searching
+])),], bottom: _searching
 ? PreferredSize(preferredSize: const Size.fromHeight(56),
 child: Padding(padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
 child: TextField(controller: _search, onChanged: (_) => setState(() {}),
 decoration: InputDecoration(hintText: Lang.t('searchHint'), prefixIcon: const Icon(Icons.search),
-suffixIcon: IconButton(icon: Icon(Icons.tune, color: Filters.active ? AppTheme.accent : Colors.grey),
+suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+VoiceBtn(onResult: (t) { _search.text = t; setState(() {}); }),
+IconButton(icon: Icon(Icons.tune, color: Filters.active ? AppTheme.accent : Colors.grey),
 onPressed: () async {
 await showDialog(context: context, builder: (_) => const AdvancedFilterDialog());
 setState(() {});
 }),
+]),
 filled: true, fillColor: const Color(0xFF151B23), border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none)))))
 : null),
 body: Stack(children: [
@@ -293,7 +305,7 @@ Widget _chip(String t, bool on, VoidCallback f) => Padding(padding: const EdgeIn
 child: FilterChip(label: Text(t, style: const TextStyle(fontSize: 11)), selected: on, onSelected: (_) => f(), selectedColor: AppTheme.accent.withOpacity(0.4)));
 }
 
-/* ======== بطاقة فيلم (مع زر تبديل الجودات) ======== */
+/* ======== بطاقة فيلم ======== */
 class MovieCard extends StatelessWidget {
 final Movie m;
 const MovieCard({super.key, required this.m});
@@ -337,6 +349,9 @@ Text(' ${m.qualityOptions.length}', style: const TextStyle(fontSize: 9, color: C
 ])))),
 if (SeriesRegistry.isSeries(m.id))
 Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
+/* ✅ شارة التكرار عبر القنوات */
+if (DupInfo.of(m) > 1)
+Positioned(bottom: 52, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(6)), child: Text('×${DupInfo.of(m)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
 if (Store.isPinned(m.id))
 Positioned(top: 6, left: 6, child: Icon(Icons.push_pin, size: 16, color: AppTheme.accent)),
 if (m.duration.isNotEmpty)
@@ -559,6 +574,7 @@ int _gmode = 0, _lastPos = 0;
 String _glabel = '';
 double _vol = 1.0, _bright = 1.0;
 int _seekBase = 0, _seekDelta = 0;
+String? _autoUrl;
 
 @override
 void initState() {
@@ -572,9 +588,25 @@ VolumeController().showSystemUI = false;
 VolumeController().listener((v) {
 if (mounted) setState(() => _vol = v);
 });
-_init();
+_initSmart();
 _poke();
 _posSaver = Timer.periodic(const Duration(seconds: 5), (_) => _savePosition());
+}
+
+/* ✅ جودة ذكية حسب السرعة ثم تشغيل */
+Future _initSmart() async {
+if (widget.movie != null) _autoUrl = await SpeedPick.bestUrl(widget.movie!);
+_init();
+}
+
+/* ✅ عند انتهاء الفيلم: الجزء التالي من السلسلة أولاً */
+void _onEnd() {
+final np = widget.movie != null ? NextPart.of(widget.movie!) : null;
+if (np != null) {
+NextPart.dialog(context, np, (m) => PlayerScreen(title: m.title, url: m.videoUrl, movie: m));
+} else if (widget.next != null) {
+_showNext();
+}
 }
 
 @override
@@ -606,8 +638,8 @@ final c = widget.filePath != null
 ? VideoPlayerController.file(File(widget.filePath!))
 : VideoPlayerController.networkUrl(Uri.parse(
 (Store.getBool('dataSaver') && widget.movie != null && widget.movie!.alts.isNotEmpty)
-? (widget.movie!.alts.last['url'] ?? widget.url!)
-: widget.url!));
+? (widget.movie!.alts.last['url'] ?? (_autoUrl ?? widget.url!))
+: (_autoUrl ?? widget.url!)));
 c.addListener(() {
 if (!mounted) return;
 setState(() {});
@@ -620,7 +652,7 @@ if (c.value.isInitialized && c.value.duration.inSeconds > 0 &&
 c.value.position.inSeconds >= c.value.duration.inSeconds - 2 && !_ended) {
 _ended = true;
 c.pause();
-if (widget.next != null) _showNext();
+_onEnd();
 }
 });
 await c.initialize();
@@ -728,7 +760,7 @@ if (c.value.isInitialized && c.value.duration.inSeconds > 0 &&
 c.value.position.inSeconds >= c.value.duration.inSeconds - 2 && !_ended) {
 _ended = true;
 c.pause();
-if (widget.next != null) _showNext();
+_onEnd();
 }
 });
 await c.initialize();
@@ -749,6 +781,20 @@ old?.play();
 @override
 void dispose() {
 _savePosition();
+/* ✅ إشعار متابعة + تنظيف تلقائي */
+if (widget.movie != null) {
+final pos = Store.getPosition(widget.movie!.id);
+final tot = StorageInfo.durSec(widget.movie!.duration);
+final fin = tot > 0 && pos >= (tot * 0.95).toInt();
+if (!fin && pos > 60) Notifier.resume(widget.movie!);
+if (fin && Store.getBool('autoClean')) {
+final d = Store.downloads()[widget.movie!.id];
+if (d != null) {
+Downloader.deleteFile((d['path'] ?? '').toString());
+Store.delDownload(widget.movie!.id);
+}
+}
+}
 _posSaver?.cancel();
 _sleep?.cancel();
 VolumeController().removeListener();
@@ -853,6 +899,7 @@ IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: (
 Expanded(child: Text(widget.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis)),
 if (widget.movie != null && widget.movie!.qualityOptions.length > 1)
 IconButton(icon: const Icon(Icons.hd, color: Colors.white70), onPressed: _qualityMenu),
+IconButton(icon: const Icon(Icons.picture_in_picture_alt, color: Colors.white70), onPressed: () => Power.pip()),
 IconButton(icon: Icon(_locked ? Icons.lock : Icons.lock_open, color: Colors.white70),
 onPressed: () => setState(() { _locked = !_locked; _ui = false; })),
 IconButton(icon: const Icon(Icons.speed, color: Colors.white70), onPressed: _speedMenu),
@@ -1004,7 +1051,6 @@ Expanded(child: Text(m.title, style: const TextStyle(fontSize: 13, fontWeight: F
 Text('${(p * 100).round()}%', style: TextStyle(fontSize: 12, color: AppTheme.accent, fontWeight: FontWeight.bold)),
 ]),
 const SizedBox(height: 8),
-/* ✅ شريط تقدم التحميل باتجاه LTR */
 Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: p, minHeight: 5, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation(AppTheme.accent))),
 const SizedBox(height: 6),
 Row(children: [
