@@ -45,7 +45,7 @@ jobs:
           echo "=== محتوى lib/main.dart (أول 10 أسطر) ==="
           head -10 lib/main.dart
 
-      - name: Patch gradle (google-services + signing + compileSdk 35)
+      - name: Patch gradle
         run: |
           python3 - << 'PYEOF'
           import re
@@ -90,13 +90,16 @@ jobs:
           print('✅ gradle patched')
           PYEOF
 
-      - name: Patch AndroidManifest + MainActivity (Python safe)
+      - name: Patch AndroidManifest and MainActivity safely
         run: |
-          python3 - << 'PYEOF'
+          python3 << 'PYEOF'
           import re, glob
+
+          # 1. Patch AndroidManifest.xml
           p = 'android/app/src/main/AndroidManifest.xml'
           with open(p, 'r', encoding='utf-8') as f:
               s = f.read()
+
           perms = [
               '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
               '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>',
@@ -107,6 +110,7 @@ jobs:
               if perm not in s:
                   s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>',
                                 '<uses-permission android:name="android.permission.INTERNET"/>\n    ' + perm, 1)
+
           feats = [
               '<uses-feature android:name="android.software.leanback" android:required="false" />',
               '<uses-feature android:name="android.hardware.touchscreen" android:required="false" />'
@@ -114,106 +118,115 @@ jobs:
           for feat in feats:
               if feat not in s:
                   s = s.replace('<application', feat + '\n    <application', 1)
+
           if 'android:usesCleartextTraffic="true"' not in s:
               s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+
           s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
+
           if 'LEANBACK_LAUNCHER' not in s:
               s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>',
                             '<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>')
+
           if 'supportsPictureInPicture' not in s:
               s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*?)(/?>)',
                          r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" \2',
                          s, count=1)
+
           with open(p, 'w', encoding='utf-8') as f:
               f.write(s)
           print('✅ AndroidManifest patched')
+
+          # 2. Patch MainActivity.kt
           k_files = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)
           if k_files:
               k = k_files[0]
-              pkg = open(k, encoding='utf-8').read().splitlines()[0]
-              kotlin = pkg + "\n" + '''
+              with open(k, 'r', encoding='utf-8') as f:
+                  pkg = f.readline().strip()
+              
+              kotlin_code = pkg + "\n\n" + """
               import android.content.pm.PackageManager
               import io.flutter.embedding.android.FlutterActivity
               import io.flutter.embedding.engine.FlutterEngine
               import io.flutter.plugin.common.MethodChannel
               class MainActivity : FlutterActivity() {
-              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-              super.configureFlutterEngine(flutterEngine)
-              MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
-              .setMethodCallHandler { call, result ->
-              when (call.method) {
-              "isTv" -> {
-              val pm = packageManager
-              result.success(pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION))
+                  override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+                      super.configureFlutterEngine(flutterEngine)
+                      MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
+                          .setMethodCallHandler { call, result ->
+                              when (call.method) {
+                                  "isTv" -> {
+                                      val pm = packageManager
+                                      result.success(pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION))
+                                  }
+                                  "openExternal" -> {
+                                      val url = call.argument<String>("url")
+                                      if (url == null) { result.success(false); return@setMethodCallHandler }
+                                      val uri = android.net.Uri.parse(url)
+                                      val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                                      intent.setDataAndType(uri, "video/*")
+                                      try {
+                                          startActivity(android.content.Intent.createChooser(intent, "Play with"))
+                                          result.success(true)
+                                      } catch (e: Exception) { result.success(false) }
+                                  }
+                                  "saveToDownloads" -> {
+                                      val name = call.argument<String>("name") ?: "telecinema_backup.json"
+                                      val content = call.argument<String>("content") ?: ""
+                                      try {
+                                          if (android.os.Build.VERSION.SDK_INT >= 29) {
+                                              val resolver = contentResolver
+                                              val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                                              resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
+                                              val values = android.content.ContentValues().apply {
+                                                  put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                                                  put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+                                                  put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                                              }
+                                              val u = resolver.insert(uri, values)
+                                              u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
+                                              result.success(u != null)
+                                          } else {
+                                              val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+                                              f.writeText(content)
+                                              result.success(true)
+                                          }
+                                      } catch (e: Exception) { result.success(false) }
+                                  }
+                                  "readFromDownloads" -> {
+                                      val name = call.argument<String>("name") ?: "telecinema_backup.json"
+                                      var text: String? = null
+                                      try {
+                                          if (android.os.Build.VERSION.SDK_INT >= 29) {
+                                              val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                                              val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
+                                              cur?.use {
+                                                  if (it.moveToFirst()) {
+                                                      val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
+                                                      text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
+                                                  }
+                                              }
+                                          } else {
+                                              val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+                                              if (f.exists()) text = f.readText()
+                                          }
+                                      } catch (e: Exception) { }
+                                      result.success(text)
+                                  }
+                                  "enterPip" -> {
+                                      if (android.os.Build.VERSION.SDK_INT >= 26) {
+                                          enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build())
+                                          result.success(true)
+                                      } else result.success(false)
+                                  }
+                                  else -> result.notImplemented()
+                              }
+                          }
+                  }
               }
-              "openExternal" -> {
-              val url = call.argument<String>("url")
-              if (url == null) { result.success(false); return@setMethodCallHandler }
-              val uri = android.net.Uri.parse(url)
-              val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
-              intent.setDataAndType(uri, "video/*")
-              try {
-              startActivity(android.content.Intent.createChooser(intent, "Play with"))
-              result.success(true)
-              } catch (e: Exception) { result.success(false) }
-              }
-              "saveToDownloads" -> {
-              val name = call.argument<String>("name") ?: "telecinema_backup.json"
-              val content = call.argument<String>("content") ?: ""
-              try {
-              if (android.os.Build.VERSION.SDK_INT >= 29) {
-              val resolver = contentResolver
-              val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-              resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
-              val values = android.content.ContentValues().apply {
-              put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
-              put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
-              put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-              }
-              val u = resolver.insert(uri, values)
-              u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
-              result.success(u != null)
-              } else {
-              val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
-              f.writeText(content)
-              result.success(true)
-              }
-              } catch (e: Exception) { result.success(false) }
-              }
-              "readFromDownloads" -> {
-              val name = call.argument<String>("name") ?: "telecinema_backup.json"
-              var text: String? = null
-              try {
-              if (android.os.Build.VERSION.SDK_INT >= 29) {
-              val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-              val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
-              cur?.use {
-              if (it.moveToFirst()) {
-              val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
-              text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
-              }
-              }
-              } else {
-              val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
-              if (f.exists()) text = f.readText()
-              }
-              } catch (e: Exception) { }
-              result.success(text)
-              }
-              "enterPip" -> {
-              if (android.os.Build.VERSION.SDK_INT >= 26) {
-              enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build())
-              result.success(true)
-              } else result.success(false)
-              }
-              else -> result.notImplemented()
-              }
-              }
-              }
-              }
-              '''
+              """
               with open(k, 'w', encoding='utf-8') as f:
-                  f.write(kotlin)
+                  f.write(kotlin_code)
               print('✅ MainActivity patched')
           PYEOF
 
