@@ -18,7 +18,7 @@ dependencies:
   wakelock_plus: ^1.2.8
   connectivity_plus: ^6.1.0
   chewie: ^1.7.4
-  speech_to_text: ^7.0.0
+  speech_to_text: ^6.6.2
   flutter_local_notifications: ^17.2.4
   firebase_core: ^2.24.2
   cloud_firestore: ^4.13.6
