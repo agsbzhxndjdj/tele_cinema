@@ -40,12 +40,7 @@ jobs:
           ls -la lib/
           echo ""
           echo "=== محتوى lib/app_tv.dart (أول 10 أسطر) ==="
-          if [ -f lib/app_tv.dart ]; then
-            head -10 lib/app_tv.dart
-          else
-            echo "⚠️  الملف lib/app_tv.dart غير موجود!"
-            exit 1
-          fi
+          if [ -f lib/app_tv.dart ]; then head -10 lib/app_tv.dart; else echo "⚠️ lib/app_tv.dart غير موجود!"; exit 1; fi
           echo ""
           echo "=== محتوى lib/main.dart (أول 10 أسطر) ==="
           head -10 lib/main.dart
@@ -54,7 +49,6 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           import re
-
           p = 'android/settings.gradle'
           s = open(p).read()
           if 'google-services' not in s:
@@ -64,18 +58,14 @@ jobs:
                   new = old[:-1] + '\n    id "com.google.gms.google-services" version "4.4.0" apply false\n}'
                   s = s.replace(old, new)
                   open(p, 'w').write(s)
-                  print('settings.gradle patched')
-
           p = 'android/app/build.gradle'
           s = open(p).read()
-
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
                   old = m.group(0)
                   new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
                   s = s.replace(old, new)
-
           sig = """    signingConfigs {
               release {
                   storeFile file('telecinema.keystore')
@@ -88,30 +78,25 @@ jobs:
           if 'signingConfigs' not in s:
               s = s.replace('    buildTypes {', sig + '\n    buildTypes {', 1)
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
-
           s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
           s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
           s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
           if 'compileSdk' not in s:
               s = re.sub(r'android\s*\{', 'android {\n    compileSdk = 35', s, count=1)
-
           s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
           s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
           s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
-
           open(p, 'w').write(s)
-          print('✅ gradle patched (google-services + signing + compileSdk 35)')
+          print('✅ gradle patched')
           PYEOF
 
       - name: Patch AndroidManifest + MainActivity (Python safe)
         run: |
           python3 - << 'PYEOF'
           import re, glob
-
           p = 'android/app/src/main/AndroidManifest.xml'
           with open(p, 'r', encoding='utf-8') as f:
               s = f.read()
-
           perms = [
               '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
               '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>',
@@ -120,9 +105,8 @@ jobs:
           ]
           for perm in perms:
               if perm not in s:
-                  s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>', 
+                  s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>',
                                 '<uses-permission android:name="android.permission.INTERNET"/>\n    ' + perm, 1)
-
           feats = [
               '<uses-feature android:name="android.software.leanback" android:required="false" />',
               '<uses-feature android:name="android.hardware.touchscreen" android:required="false" />'
@@ -130,25 +114,19 @@ jobs:
           for feat in feats:
               if feat not in s:
                   s = s.replace('<application', feat + '\n    <application', 1)
-
           if 'android:usesCleartextTraffic="true"' not in s:
               s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
-
           s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
-
           if 'LEANBACK_LAUNCHER' not in s:
-              s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>', 
+              s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>',
                             '<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>')
-
           if 'supportsPictureInPicture' not in s:
-              s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*?)(/?>)', 
-                         r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" \2', 
+              s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*?)(/?>)',
+                         r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" \2',
                          s, count=1)
-
           with open(p, 'w', encoding='utf-8') as f:
               f.write(s)
-          print('✅ AndroidManifest patched successfully')
-
+          print('✅ AndroidManifest patched')
           k_files = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)
           if k_files:
               k = k_files[0]
@@ -177,9 +155,7 @@ jobs:
               try {
               startActivity(android.content.Intent.createChooser(intent, "Play with"))
               result.success(true)
-              } catch (e: Exception) {
-              result.success(false)
-              }
+              } catch (e: Exception) { result.success(false) }
               }
               "saveToDownloads" -> {
               val name = call.argument<String>("name") ?: "telecinema_backup.json"
@@ -202,9 +178,7 @@ jobs:
               f.writeText(content)
               result.success(true)
               }
-              } catch (e: Exception) {
-              result.success(false)
-              }
+              } catch (e: Exception) { result.success(false) }
               }
               "readFromDownloads" -> {
               val name = call.argument<String>("name") ?: "telecinema_backup.json"
@@ -240,7 +214,7 @@ jobs:
               '''
               with open(k, 'w', encoding='utf-8') as f:
                   f.write(kotlin)
-              print('✅ MainActivity patched successfully')
+              print('✅ MainActivity patched')
           PYEOF
 
       - name: Prepare (pub get + icons)
