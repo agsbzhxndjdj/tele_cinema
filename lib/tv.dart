@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'core.dart';
+import 'power.dart';
 import 'lang.dart';
 import 'extra.dart';
 import 'features.dart';
@@ -84,8 +85,7 @@ void initState() {
 super.initState();
 if (Store.channels().isNotEmpty && Store.all().isEmpty) _refresh();
 _loadPopular();
-/* ✅ التحقق من السلاسل عبر TMDB */
-Future.delayed(const Duration(seconds: 3), () => verifySeries());
+DupInfo.refresh();
 }
 
 @override
@@ -105,7 +105,7 @@ final ids = p.movies.map((e) => e.msgId).toSet();
 await Store.saveMovies(c.username, [...p.movies, ...old.where((e) => !ids.contains(e.msgId))]);
 } catch (_) {}
 }
-verifySeries();
+DupInfo.refresh();
 if (mounted) setState(() => _busy = false);
 }
 
@@ -397,13 +397,14 @@ IconButton(icon: const Icon(Icons.sort, color: Colors.white70, size: 26), toolti
 IconButton(icon: const Icon(Icons.casino, color: Colors.white70, size: 26), tooltip: 'فيلم عشوائي', onPressed: _random),
 IconButton(icon: const Icon(Icons.explore_outlined, color: Colors.white70, size: 26), tooltip: 'اكتشف', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
 IconButton(icon: const Icon(Icons.emoji_events_outlined, color: Colors.white70, size: 26), tooltip: 'انجازاتي', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
+IconButton(icon: const Icon(Icons.hub_outlined, color: Colors.white70, size: 26), tooltip: 'أدوات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PowerHub()))),
 IconButton(icon: const Icon(Icons.settings, color: Colors.white70, size: 26), tooltip: 'الإعدادات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
 IconButton(icon: const Icon(Icons.edit_note, color: Colors.white70, size: 26), tooltip: 'إدارة القنوات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageChannelsScreen()))),
 IconButton(icon: const Icon(Icons.refresh, color: Colors.white70, size: 26), tooltip: 'تحديث', onPressed: _refresh),
 const SizedBox(width: 6),
 FilledButton.icon(onPressed: _addDialog, icon: const Icon(Icons.add_link, size: 20), label: Text(Lang.t('addChannel'), style: const TextStyle(fontSize: 14)), style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1B2430), foregroundColor: Colors.white, minimumSize: const Size(0, 44), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))),
 ])),
-if (_searching) Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: TextField(controller: _searchCtrl, autofocus: true, onChanged: (v) => setState(() => _query = v), style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'ابحث عن فيلم...', hintStyle: const TextStyle(color: Colors.grey), prefixIcon: Icon(Icons.search, color: AppTheme.accent), suffixIcon: IconButton(icon: const Icon(Icons.clear, color: Colors.white70), onPressed: () => _searchCtrl.clear()), filled: true, fillColor: const Color(0xFF151B23), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
+if (_searching) Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: TextField(controller: _searchCtrl, autofocus: true, onChanged: (v) => setState(() => _query = v), style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: 'ابحث عن فيلم...', hintStyle: const TextStyle(color: Colors.grey), prefixIcon: Icon(Icons.search, color: AppTheme.accent), suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [VoiceBtn(onResult: (t) => _searchCtrl.text = t), IconButton(icon: const Icon(Icons.clear, color: Colors.white70), onPressed: () => _searchCtrl.clear())]), filled: true, fillColor: const Color(0xFF151B23), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)))),
 SizedBox(height: 52, child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 24), children: [
 _tabChip('all', 'الكل', icon: const Icon(Icons.movie, size: 18)),
 _tabChip('cont', 'متابعة المشاهدة', icon: const Icon(Icons.history, size: 18)),
@@ -491,6 +492,8 @@ if (m.quality.isNotEmpty) Positioned(top: 6, right: 6, child: Container(padding:
 /* ✅ شارة سلسلة */
 if (_isSeries(m)) Positioned(top: m.quality.isNotEmpty ? 30 : 6, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.movie_filter, size: 11, color: Colors.white), SizedBox(width: 3), Text('سلسلة', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white))]))),
 if (SeriesRegistry.isSeries(m.id)) Positioned(top: 26, left: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(6)), child: Text('سلسلة ${SeriesRegistry.count(m.id)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
+/* ✅ شارة التكرار عبر القنوات */
+if (DupInfo.of(m) > 1) Positioned(bottom: 40, right: 6, child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(6)), child: Text('×${DupInfo.of(m)}', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)))),
 if (Store.isFav(m.id)) Positioned(top: 6, left: 6, child: Icon(Icons.favorite, size: 16, color: Colors.red)),
 /* ✅ شريط التقدم باتجاه LTR */
 if (pos > 0 && tot > 0) Positioned(left: 0, right: 0, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: pos / tot, minHeight: 4, backgroundColor: Colors.black54, valueColor: AlwaysStoppedAnimation(AppTheme.accent)))),
@@ -601,7 +604,7 @@ OutlinedButton.icon(onPressed: _openExternal, icon: const Icon(Icons.open_in_new
 ]),
 ])),
 ]),
-/* ✅ أجزاء السلسلة (تظهر لأي فيلم من السلسلة) */
+/* ✅ أجزاء السلسلة */
 if (SeriesRegistry.isSeries(m.id)) ...[
 const SizedBox(height: 28),
 Text('أجزاء السلسلة', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.accent)),
@@ -643,9 +646,12 @@ State<TvPlayer> createState() => _TvPlayerState();
 class _TvPlayerState extends State<TvPlayer> {
 VideoPlayerController? _c;
 bool _ready = false, _err = false, _ui = true;
-Timer? _hide, _saver;
+Timer? _hide, _saver, _amb;
 String _currentQuality = '';
 String _currentUrl = '';
+String? _autoUrl;
+bool _ended = false, _ambient = false;
+DateTime? _pausedAt;
 
 @override
 void initState() {
@@ -655,8 +661,24 @@ _currentUrl = widget.startUrl ?? widget.movie.videoUrl;
 Store.markWatched(widget.movie);
 WakelockPlus.enable();
 _saver = Timer.periodic(const Duration(seconds: 5), (_) => _save());
-_init();
+/* ✅ حماية الشاشة: بعد 3 دقائق إيقاف */
+_amb = Timer.periodic(const Duration(seconds: 20), (_) {
+final c = _c;
+if (c != null && c.value.isInitialized && !c.value.isPlaying) {
+_pausedAt ??= DateTime.now();
+if (DateTime.now().difference(_pausedAt!) > const Duration(minutes: 3) && !_ambient && mounted) setState(() => _ambient = true);
+} else {
+_pausedAt = null;
+}
+});
+_initSmart();
 _poke();
+}
+
+/* ✅ جودة ذكية حسب السرعة ثم تشغيل */
+Future _initSmart() async {
+_autoUrl = await SpeedPick.bestUrl(widget.movie);
+_init();
 }
 
 Future _save() async {
@@ -671,7 +693,7 @@ Future _init({String? url}) async {
 try {
 final c = widget.localPath != null
 ? VideoPlayerController.file(File(widget.localPath!))
-: VideoPlayerController.networkUrl(Uri.parse(url ?? _currentUrl));
+: VideoPlayerController.networkUrl(Uri.parse(url ?? (_autoUrl ?? _currentUrl)));
 await c.initialize();
 final saved = Store.getPosition(widget.movie.id);
 if (saved > 0) await c.seekTo(Duration(seconds: saved));
@@ -681,6 +703,14 @@ return;
 }
 c.addListener(() {
 if (mounted) setState(() {});
+/* ✅ عند الانتهاء: الجزء التالي تلقائياً */
+if (c.value.isInitialized && c.value.duration.inSeconds > 0 &&
+c.value.position.inSeconds >= c.value.duration.inSeconds - 2 && !_ended) {
+_ended = true;
+c.pause();
+final np = NextPart.of(widget.movie);
+if (np != null && mounted) NextPart.dialog(context, np, (m) => TvPlayer(movie: m));
+}
 });
 setState(() {
 _c = c;
@@ -791,6 +821,7 @@ _poke();
 void dispose() {
 _save();
 _saver?.cancel();
+_amb?.cancel();
 _hide?.cancel();
 WakelockPlus.disable();
 _c?.dispose();
@@ -809,6 +840,8 @@ autofocus: true,
 onKey: _onKey,
 child: Stack(fit: StackFit.expand, children: [
 if (c != null && _ready) Center(child: AspectRatio(aspectRatio: c.value.aspectRatio, child: VideoPlayer(c))),
+/* ✅ حماية الشاشة (ساعة باهتة عند الإيقاف الطويل) */
+if (_ambient) AmbientClock(onTap: () => setState(() { _ambient = false; _pausedAt = null; })),
 if (_err) Center(child: Text(Lang.t('failedPlay'), style: const TextStyle(color: Colors.grey, fontSize: 18))),
 if (!_ready && !_err) const Center(child: CircularProgressIndicator(color: Colors.amber)),
 if (_ui)
