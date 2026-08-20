@@ -247,11 +247,6 @@ Widget _card(String t, String v) => Expanded(child: Card(color: const Color(0xFF
 }
 
 /* ✅ مدير المساحة */
-class StorageScreen extends StatefulWidget {
-const StorageScreen({super.key});
-@override
-State<StorageScreen> createState() => _StorageScreenState();
-}
 class _StorageScreenState extends State<StorageScreen> {
 Map<String, num>? s;
 @override
@@ -270,14 +265,16 @@ const SizedBox(width: 12),
 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 Text('إجمالي التحميلات: ${gb(s['total']!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
 Text('${s['ct']} فيلم', style: const TextStyle(color: Colors.white70)),
-])),
+]),
+]))),
 Card(color: const Color(0xFF1B2430), child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
 const Icon(Icons.visibility, color: Colors.green, size: 40),
 const SizedBox(width: 12),
 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 Text('مشاهدة ويمكن حذفها: ${gb(s['watched']!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
 Text('${s['cw']} فيلم', style: const TextStyle(color: Colors.white70)),
-])),
+]),
+]))),
 const SizedBox(height: 16),
 FilledButton.icon(onPressed: () async {
 final n = await StorageInfo.cleanWatched();
