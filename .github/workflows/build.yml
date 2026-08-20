@@ -95,7 +95,6 @@ jobs:
           python3 << 'PYEOF'
           import re, glob
 
-          # 1. Patch AndroidManifest.xml
           p = 'android/app/src/main/AndroidManifest.xml'
           with open(p, 'r', encoding='utf-8') as f:
               s = f.read()
@@ -130,14 +129,13 @@ jobs:
 
           if 'supportsPictureInPicture' not in s:
               s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*?)(/?>)',
-                         r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" \2',
+                         r'\1 android:supportsPictureInPicture="true" \2',
                          s, count=1)
 
           with open(p, 'w', encoding='utf-8') as f:
               f.write(s)
           print('✅ AndroidManifest patched')
 
-          # 2. Patch MainActivity.kt
           k_files = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)
           if k_files:
               k = k_files[0]
