@@ -190,30 +190,52 @@ SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize:
 IconButton(icon: const Icon(Icons.search), onPressed: () => setState(() => _searching = !_searching)),
 IconButton(icon: const Icon(Icons.casino), onPressed: _random),
 PopupMenuButton<String>(
-icon: const Icon(Icons.sort),
-onSelected: (v) async { await Store.setSortMode(v); setState(() {}); },
-itemBuilder: (_) => [
-_sortItem('default', 'الأحدث أولاً'),
-_sortItem('az', 'أبجدي (ذكي)'),
-_sortItem('year_desc', 'السنة: الأحدث'),
-_sortItem('year_asc', 'السنة: الأقدم'),
-_sortItem('size_desc', 'الحجم: الأكبر'),
-_sortItem('size_asc', 'الحجم: الأصغر'),
-_sortItem('smart', '✨ ذكي (حسب ذوقك)'),
-],
+  icon: const Icon(Icons.sort),
+  onSelected: (v) async {
+    await Store.setSortMode(v);
+    setState(() {});
+  },
+  itemBuilder: (_) => [
+    _sortItem('default', 'الأحدث أولاً'),
+    _sortItem('az', 'أبجدي (ذكي)'),
+    _sortItem('year_desc', 'السنة: الأحدث'),
+    _sortItem('year_asc', 'السنة: الأقدم'),
+    _sortItem('size_desc', 'الحجم: الأكبر'),
+    _sortItem('size_asc', 'الحجم: الأصغر'),
+    _sortItem('smart', '✨ ذكي (حسب ذوقك)'),
+  ],
 ),
-IconButton(icon: const Icon(Icons.explore_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()))),
-IconButton(icon: const Icon(Icons.emoji_events_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()))),
-IconButton(icon: const Icon(Icons.movie_filter_outlined), tooltip: 'السلاسل', onPressed: () {
-final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
-if (seriesOnly.isEmpty) {
-ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
-return;
-}
-Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
-}),
-IconButton(icon: const Icon(Icons.hub_outlined), tooltip: 'أدوات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PowerHub()))),
-IconButton(icon: const Icon(Icons.settings), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()))),
+PopupMenuButton<String>(
+  icon: const Icon(Icons.more_vert),
+  tooltip: 'المزيد',
+  onSelected: (value) {
+    switch (value) {
+      case 'explore':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()));
+        break;
+      case 'achievements':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()));
+        break;
+      case 'series':
+        final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
+        if (seriesOnly.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
+          return;
+        }
+        Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
+        break;
+      case 'settings':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
+        break;
+    }
+  },
+  itemBuilder: (context) => [
+    const PopupMenuItem(value: 'explore', child: Row(children: [Icon(Icons.explore_outlined), SizedBox(width: 12), Text('اكتشف')])),
+    const PopupMenuItem(value: 'achievements', child: Row(children: [Icon(Icons.emoji_events_outlined), SizedBox(width: 12), Text('انجازاتي')])),
+    const PopupMenuItem(value: 'series', child: Row(children: [Icon(Icons.movie_filter_outlined), SizedBox(width: 12), Text('السلاسل')])),
+    const PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.settings), SizedBox(width: 12), Text('الإعدادات')])),
+  ],
+),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
 ])),], bottom: _searching
 ? PreferredSize(preferredSize: const Size.fromHeight(56),
