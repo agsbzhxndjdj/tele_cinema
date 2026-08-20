@@ -55,7 +55,6 @@ jobs:
           python3 - << 'PYEOF'
           import re
 
-          # 1) settings.gradle
           p = 'android/settings.gradle'
           s = open(p).read()
           if 'google-services' not in s:
@@ -67,11 +66,9 @@ jobs:
                   open(p, 'w').write(s)
                   print('settings.gradle patched')
 
-          # 2) app/build.gradle
           p = 'android/app/build.gradle'
           s = open(p).read()
 
-          # إضافة google-services
           if 'com.google.gms.google-services' not in s:
               m = re.search(r'plugins\s*\{[^}]*\}', s)
               if m:
@@ -79,7 +76,6 @@ jobs:
                   new = old[:-1] + '\n    id "com.google.gms.google-services"\n}'
                   s = s.replace(old, new)
 
-          # إضافة signingConfigs
           sig = """    signingConfigs {
               release {
                   storeFile file('telecinema.keystore')
@@ -93,14 +89,12 @@ jobs:
               s = s.replace('    buildTypes {', sig + '\n    buildTypes {', 1)
           s = s.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release')
 
-          # تعديل compileSdk إلى 35
           s = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
           s = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 35', s)
           s = re.sub(r'compileSdk\s+flutter\.compileSdkVersion', 'compileSdk = 35', s)
           if 'compileSdk' not in s:
               s = re.sub(r'android\s*\{', 'android {\n    compileSdk = 35', s, count=1)
 
-          # أيضاً targetSdk
           s = re.sub(r'targetSdkVersion\s+\d+', 'targetSdkVersion 35', s)
           s = re.sub(r'targetSdk\s*=?\s*\d+', 'targetSdk = 35', s)
           s = re.sub(r'targetSdk\s+flutter\.targetSdkVersion', 'targetSdk = 35', s)
@@ -109,20 +103,15 @@ jobs:
           print('✅ gradle patched (google-services + signing + compileSdk 35)')
           PYEOF
 
-          echo "=== سطور compileSdk في build.gradle ==="
-          grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
-
-      - name: Patch AndroidManifest + MainActivity (كل التعديلات)
+      - name: Patch AndroidManifest + MainActivity (Python safe)
         run: |
           python3 - << 'PYEOF'
           import re, glob
-          
-          # 1. تعديل AndroidManifest.xml
+
           p = 'android/app/src/main/AndroidManifest.xml'
           with open(p, 'r', encoding='utf-8') as f:
               s = f.read()
 
-          # الصلاحيات (Permissions)
           perms = [
               '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
               '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>',
@@ -134,7 +123,6 @@ jobs:
                   s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>', 
                                 '<uses-permission android:name="android.permission.INTERNET"/>\n    ' + perm, 1)
 
-          # ميزات التلفزيون (TV Features)
           feats = [
               '<uses-feature android:name="android.software.leanback" android:required="false" />',
               '<uses-feature android:name="android.hardware.touchscreen" android:required="false" />'
@@ -143,18 +131,15 @@ jobs:
               if feat not in s:
                   s = s.replace('<application', feat + '\n    <application', 1)
 
-          # خصائص التطبيق
           if 'android:usesCleartextTraffic="true"' not in s:
               s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
-          
+
           s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
 
-          # مشغل التلفزيون (LEANBACK_LAUNCHER)
           if 'LEANBACK_LAUNCHER' not in s:
               s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>', 
                             '<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>')
 
-          # PiP و configChanges لـ MainActivity
           if 'supportsPictureInPicture' not in s:
               s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*?)(/?>)', 
                          r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" \2', 
@@ -164,7 +149,6 @@ jobs:
               f.write(s)
           print('✅ AndroidManifest patched successfully')
 
-          # 2. تعديل MainActivity.kt لدعم PiP + تصدير/استيراد + كشف TV + تشغيل خارجي
           k_files = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)
           if k_files:
               k = k_files[0]
@@ -273,8 +257,13 @@ jobs:
 
       - name: Build TV APK
         run: |
+          python3 -c "
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p).read().replace('android:label=\"تلي سينما\"', 'android:label=\"تلي سينما TV\"')
+          open(p, 'w').write(s)
+          print('✅ TV label patched')
+          "
           echo "=== بناء تطبيق التلفزيون ==="
-          sed -i 's/android:label="تلي سينما"/android:label="تلي سينما TV"/' android/app/src/main/AndroidManifest.xml
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
           ls -lh build/app/outputs/flutter-apk/
