@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,6 +16,7 @@ static const String apiKey = '9fded672447abe47324249048e9b3ee8a3472a6564e613dbfc
 class App {
 static final ValueNotifier<String> scope = ValueNotifier('all');
 static final ValueNotifier<int> tab = ValueNotifier(0);
+static final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 static final ValueNotifier<int> tick = ValueNotifier(0);
 static final ValueNotifier<String> query = ValueNotifier('');
 }
