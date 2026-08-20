@@ -178,6 +178,52 @@ return n;
 }
 }
 
+/* ✅ شاشة مدير المساحة */
+class StorageScreen extends StatefulWidget {
+const StorageScreen({super.key});
+@override
+State<StorageScreen> createState() => _StorageScreenState();
+}
+
+class _StorageScreenState extends State<StorageScreen> {
+Map<String, num>? s;
+@override
+void initState() { super.initState(); _scan(); }
+void _scan() => StorageInfo.scan().then((v) { if (mounted) setState(() => s = v); });
+String gb(num b) => '${(b / 1073741824).toStringAsFixed(2)} GB';
+@override
+Widget build(BuildContext context) {
+final s = this.s;
+return Scaffold(backgroundColor: const Color(0xFF0B0F14),
+appBar: AppBar(backgroundColor: const Color(0xFF0B0F14), foregroundColor: Colors.white, title: const Text('💾 مدير المساحة')),
+body: s == null ? const Center(child: CircularProgressIndicator()) : ListView(padding: const EdgeInsets.all(16), children: [
+Card(color: const Color(0xFF1B2430), child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+const Icon(Icons.folder, color: Colors.amber, size: 40),
+const SizedBox(width: 12),
+Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+Text('إجمالي التحميلات: ${gb(s['total']!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+Text('${s['ct']} فيلم', style: const TextStyle(color: Colors.white70)),
+]),
+]))),
+Card(color: const Color(0xFF1B2430), child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+const Icon(Icons.visibility, color: Colors.green, size: 40),
+const SizedBox(width: 12),
+Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+Text('مشاهدة ويمكن حذفها: ${gb(s['watched']!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+Text('${s['cw']} فيلم', style: const TextStyle(color: Colors.white70)),
+]),
+]))),
+const SizedBox(height: 16),
+FilledButton.icon(onPressed: () async {
+final n = await StorageInfo.cleanWatched();
+if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف $n فيلم مشاهد ✅')));
+_scan();
+}, icon: const Icon(Icons.cleaning_services), label: const Text('حذف كل المشاهدة دفعة واحدة'),
+style: FilledButton.styleFrom(backgroundColor: Colors.red, minimumSize: const Size.fromHeight(54))),
+]));
+}
+}
+
 /* ✅ 7+17 بحث صوتي */
 class VoiceBtn extends StatefulWidget {
 final void Function(String text) onResult;
@@ -246,46 +292,6 @@ Wrap(spacing: 8, runSpacing: 8, children: top.map((e) => Chip(label: Text('${e.k
 Widget _card(String t, String v) => Expanded(child: Card(color: const Color(0xFF1B2430), child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [Text(v, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.amber)), const SizedBox(height: 4), Text(t, style: const TextStyle(fontSize: 11, color: Colors.white70))]))));
 }
 
-/* ✅ مدير المساحة */
-class _StorageScreenState extends State<StorageScreen> {
-Map<String, num>? s;
-@override
-void initState() { super.initState(); _scan(); }
-void _scan() => StorageInfo.scan().then((v) { if (mounted) setState(() => s = v); });
-String gb(num b) => '${(b / 1073741824).toStringAsFixed(2)} GB';
-@override
-Widget build(BuildContext context) {
-final s = this.s;
-return Scaffold(backgroundColor: const Color(0xFF0B0F14),
-appBar: AppBar(backgroundColor: const Color(0xFF0B0F14), foregroundColor: Colors.white, title: const Text('💾 مدير المساحة')),
-body: s == null ? const Center(child: CircularProgressIndicator()) : ListView(padding: const EdgeInsets.all(16), children: [
-Card(color: const Color(0xFF1B2430), child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-const Icon(Icons.folder, color: Colors.amber, size: 40),
-const SizedBox(width: 12),
-Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-Text('إجمالي التحميلات: ${gb(s['total']!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-Text('${s['ct']} فيلم', style: const TextStyle(color: Colors.white70)),
-]),
-]))),
-Card(color: const Color(0xFF1B2430), child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
-const Icon(Icons.visibility, color: Colors.green, size: 40),
-const SizedBox(width: 12),
-Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-Text('مشاهدة ويمكن حذفها: ${gb(s['watched']!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
-Text('${s['cw']} فيلم', style: const TextStyle(color: Colors.white70)),
-]),
-]))),
-const SizedBox(height: 16),
-FilledButton.icon(onPressed: () async {
-final n = await StorageInfo.cleanWatched();
-if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('تم حذف $n فيلم مشاهد ✅')));
-_scan();
-}, icon: const Icon(Icons.cleaning_services), label: const Text('حذف كل المشاهدة دفعة واحدة'),
-style: FilledButton.styleFrom(backgroundColor: Colors.red, minimumSize: const Size.fromHeight(54))),
-]));
-}
-}
-
 /* ✅ مركز الأدوات */
 class PowerHub extends StatelessWidget {
 const PowerHub({super.key});
@@ -302,8 +308,8 @@ if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content
 Store.tick.value++;
 }),
 SwitchListTile(title: const Text('👤 وضع الضيف', style: TextStyle(color: Colors.white)), subtitle: const Text('سجل ومفضلة منفصلة', style: TextStyle(color: Colors.white54)), value: Store.getString('profile') == 'ضيف', onChanged: (v) async { await Store.setString('profile', v ? 'ضيف' : 'الرئيسي'); Store.tick.value++; }),
-SwitchListTile(title: const Text('⚡ جودة ذكية حسب سرعة الإنترنت', style: TextStyle(color: Colors.white)), value: Store.getBool('autoQuality', true), onChanged: (v) => Store.setBool('autoQuality', v)),
-SwitchListTile(title: const Text('🧹 حذف التحميل تلقائياً بعد مشاهدته', style: TextStyle(color: Colors.white)), value: Store.getBool('autoClean', false), onChanged: (v) => Store.setBool('autoClean', v)),
+SwitchListTile(title: const Text('⚡ جودة ذكية حسب سرعة الإنترنت', style: TextStyle(color: Colors.white)), value: Store.getBool('autoQuality', true), onChanged: (v) => Store.setPref('autoQuality', v)),
+SwitchListTile(title: const Text('🧹 حذف التحميل تلقائياً بعد مشاهدته', style: TextStyle(color: Colors.white)), value: Store.getBool('autoClean', false), onChanged: (v) => Store.setPref('autoClean', v)),
 SwitchListTile(title: const Text('🌐 English', style: TextStyle(color: Colors.white)), value: Store.locale == 'en', onChanged: (v) async { await Store.setString('locale', v ? 'en' : 'ar'); Store.tick.value++; }),
 ]));
 }
