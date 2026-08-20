@@ -112,128 +112,151 @@ jobs:
           echo "=== سطور compileSdk في build.gradle ==="
           grep -n "compileSdk\|targetSdk" android/app/build.gradle || echo "لم يتم العثور على compileSdk!"
 
-      - name: Patch AndroidManifest (HTTP + الاسم + Android TV + الإشعارات + التخزين)
-        run: |
-          sed -i 's|<application|<uses-feature android:name="android.software.leanback" android:required="false" />\n    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n    <application|' android/app/src/main/AndroidManifest.xml
-          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="[^"]*"/android:label="تلي سينما"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's|<category android:name="android.intent.category.LAUNCHER"/>|<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>|' android/app/src/main/AndroidManifest.xml
-          sed -i 's|<uses-permission android:name="android.permission.INTERNET"/>|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>|' android/app/src/main/AndroidManifest.xml
-          grep -n "usesCleartextTraffic\|LEANBACK\|POST_NOTIFICATIONS\|EXTERNAL_STORAGE" android/app/src/main/AndroidManifest.xml
-
-      - name: Patch MainActivity (كشف TV + تشغيل خارجي + تصدير/استيراد النسخ الاحتياطي)
-        run: |
-      - name: Patch MainActivity (كشف TV + تشغيل خارجي + نسخ احتياطي)
-        run: |
-          python3 - << 'PYEOF'
-          import glob
-          path = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)[0]
-          pkg = open(path, encoding='utf-8').read().splitlines()[0]
-          kotlin = pkg + "\n" + '''
-          import android.content.pm.PackageManager
-          import io.flutter.embedding.android.FlutterActivity
-          import io.flutter.embedding.engine.FlutterEngine
-          import io.flutter.plugin.common.MethodChannel
-          class MainActivity : FlutterActivity() {
-          override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-          super.configureFlutterEngine(flutterEngine)
-          MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
-          .setMethodCallHandler { call, result ->
-          when (call.method) {
-          "isTv" -> {
-          val pm = packageManager
-          result.success(pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION))
-          }
-          "openExternal" -> {
-          val url = call.argument<String>("url")
-          if (url == null) { result.success(false); return@setMethodCallHandler }
-          val uri = android.net.Uri.parse(url)
-          val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
-          intent.setDataAndType(uri, "video/*")
-          try {
-          startActivity(android.content.Intent.createChooser(intent, "Play with"))
-          result.success(true)
-          } catch (e: Exception) {
-          result.success(false)
-          }
-          }
-          "saveToDownloads" -> {
-          val name = call.argument<String>("name") ?: "telecinema_backup.json"
-          val content = call.argument<String>("content") ?: ""
-          try {
-          if (android.os.Build.VERSION.SDK_INT >= 29) {
-          val resolver = contentResolver
-          val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-          resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
-          val values = android.content.ContentValues().apply {
-          put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
-          put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
-          put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-          }
-          val u = resolver.insert(uri, values)
-          u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
-          result.success(u != null)
-          } else {
-          val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
-          f.writeText(content)
-          result.success(true)
-          }
-          } catch (e: Exception) {
-          result.success(false)
-          }
-          }
-          "readFromDownloads" -> {
-          val name = call.argument<String>("name") ?: "telecinema_backup.json"
-          var text: String? = null
-          try {
-          if (android.os.Build.VERSION.SDK_INT >= 29) {
-          val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
-          val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
-          cur?.use {
-          if (it.moveToFirst()) {
-          val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
-          text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
-          }
-          }
-          } else {
-          val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
-          if (f.exists()) text = f.readText()
-          }
-          } catch (e: Exception) { }
-          result.success(text)
-          }
-          else -> result.notImplemented()
-          }
-          }
-          }
-          }
-          '''
-          open(path, 'w', encoding='utf-8').write(kotlin)
-          print('✅ MainActivity patched')
-          PYEOF
-
-
-      - name: Patch PiP + Mic + enterPip
+      - name: Patch AndroidManifest + MainActivity (كل التعديلات)
         run: |
           python3 - << 'PYEOF'
           import re, glob
+          
+          # 1. تعديل AndroidManifest.xml
           p = 'android/app/src/main/AndroidManifest.xml'
-          s = open(p).read()
-          if 'RECORD_AUDIO' not in s:
-              s = s.replace('<application', '<uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <application', 1)
-          s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*)>', r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation">', s, count=1)
-          open(p, 'w').write(s)
-          k = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)[0]
-          c = open(k).read()
-          c = c.replace('else -> result.notImplemented()', '''"enterPip" -> {
+          with open(p, 'r', encoding='utf-8') as f:
+              s = f.read()
+
+          # الصلاحيات (Permissions)
+          perms = [
+              '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>',
+              '<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>',
+              '<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>',
+              '<uses-permission android:name="android.permission.RECORD_AUDIO"/>'
+          ]
+          for perm in perms:
+              if perm not in s:
+                  s = s.replace('<uses-permission android:name="android.permission.INTERNET"/>', 
+                                '<uses-permission android:name="android.permission.INTERNET"/>\n    ' + perm, 1)
+
+          # ميزات التلفزيون (TV Features)
+          feats = [
+              '<uses-feature android:name="android.software.leanback" android:required="false" />',
+              '<uses-feature android:name="android.hardware.touchscreen" android:required="false" />'
+          ]
+          for feat in feats:
+              if feat not in s:
+                  s = s.replace('<application', feat + '\n    <application', 1)
+
+          # خصائص التطبيق
+          if 'android:usesCleartextTraffic="true"' not in s:
+              s = s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          
+          s = re.sub(r'android:label="[^"]*"', 'android:label="تلي سينما"', s)
+
+          # مشغل التلفزيون (LEANBACK_LAUNCHER)
+          if 'LEANBACK_LAUNCHER' not in s:
+              s = s.replace('<category android:name="android.intent.category.LAUNCHER"/>', 
+                            '<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>')
+
+          # PiP و configChanges لـ MainActivity
+          if 'supportsPictureInPicture' not in s:
+              s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*?)(/?>)', 
+                         r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation" \2', 
+                         s, count=1)
+
+          with open(p, 'w', encoding='utf-8') as f:
+              f.write(s)
+          print('✅ AndroidManifest patched successfully')
+
+          # 2. تعديل MainActivity.kt لدعم PiP + تصدير/استيراد + كشف TV + تشغيل خارجي
+          k_files = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)
+          if k_files:
+              k = k_files[0]
+              pkg = open(k, encoding='utf-8').read().splitlines()[0]
+              kotlin = pkg + "\n" + '''
+              import android.content.pm.PackageManager
+              import io.flutter.embedding.android.FlutterActivity
+              import io.flutter.embedding.engine.FlutterEngine
+              import io.flutter.plugin.common.MethodChannel
+              class MainActivity : FlutterActivity() {
+              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+              super.configureFlutterEngine(flutterEngine)
+              MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tele_cinema/device")
+              .setMethodCallHandler { call, result ->
+              when (call.method) {
+              "isTv" -> {
+              val pm = packageManager
+              result.success(pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION))
+              }
+              "openExternal" -> {
+              val url = call.argument<String>("url")
+              if (url == null) { result.success(false); return@setMethodCallHandler }
+              val uri = android.net.Uri.parse(url)
+              val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+              intent.setDataAndType(uri, "video/*")
+              try {
+              startActivity(android.content.Intent.createChooser(intent, "Play with"))
+              result.success(true)
+              } catch (e: Exception) {
+              result.success(false)
+              }
+              }
+              "saveToDownloads" -> {
+              val name = call.argument<String>("name") ?: "telecinema_backup.json"
+              val content = call.argument<String>("content") ?: ""
+              try {
+              if (android.os.Build.VERSION.SDK_INT >= 29) {
+              val resolver = contentResolver
+              val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+              resolver.delete(uri, android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name))
+              val values = android.content.ContentValues().apply {
+              put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+              put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+              put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+              }
+              val u = resolver.insert(uri, values)
+              u?.let { resolver.openOutputStream(it)?.use { os -> os.write(content.toByteArray()) } }
+              result.success(u != null)
+              } else {
+              val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+              f.writeText(content)
+              result.success(true)
+              }
+              } catch (e: Exception) {
+              result.success(false)
+              }
+              }
+              "readFromDownloads" -> {
+              val name = call.argument<String>("name") ?: "telecinema_backup.json"
+              var text: String? = null
+              try {
+              if (android.os.Build.VERSION.SDK_INT >= 29) {
+              val uri = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+              val cur = contentResolver.query(uri, arrayOf(android.provider.MediaStore.Downloads._ID), android.provider.MediaStore.Downloads.DISPLAY_NAME + "=?", arrayOf(name), null)
+              cur?.use {
+              if (it.moveToFirst()) {
+              val u = android.content.ContentUris.withAppendedId(uri, it.getLong(0))
+              text = contentResolver.openInputStream(u)?.use { s -> String(s.readBytes()) }
+              }
+              }
+              } else {
+              val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), name)
+              if (f.exists()) text = f.readText()
+              }
+              } catch (e: Exception) { }
+              result.success(text)
+              }
+              "enterPip" -> {
               if (android.os.Build.VERSION.SDK_INT >= 26) {
-                  enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build())
-                  result.success(true)
+              enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build())
+              result.success(true)
               } else result.success(false)
-          }
-          else -> result.notImplemented()''', 1)
-          open(k, 'w').write(c)
-          print('✅ pip + mic patched')
+              }
+              else -> result.notImplemented()
+              }
+              }
+              }
+              }
+              '''
+              with open(k, 'w', encoding='utf-8') as f:
+                  f.write(kotlin)
+              print('✅ MainActivity patched successfully')
           PYEOF
 
       - name: Prepare (pub get + icons)
