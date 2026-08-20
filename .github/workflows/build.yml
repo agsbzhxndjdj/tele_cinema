@@ -212,6 +212,30 @@ jobs:
           print('✅ MainActivity patched')
           PYEOF
 
+
+      - name: Patch PiP + Mic + enterPip
+        run: |
+          python3 - << 'PYEOF'
+          import re, glob
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p).read()
+          if 'RECORD_AUDIO' not in s:
+              s = s.replace('<application', '<uses-permission android:name="android.permission.RECORD_AUDIO"/>\n    <application', 1)
+          s = re.sub(r'(<activity[^>]*\.MainActivity[^>]*)>', r'\1 android:supportsPictureInPicture="true" android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation">', s, count=1)
+          open(p, 'w').write(s)
+          k = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)[0]
+          c = open(k).read()
+          c = c.replace('else -> result.notImplemented()', '''"enterPip" -> {
+              if (android.os.Build.VERSION.SDK_INT >= 26) {
+                  enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(16, 9)).build())
+                  result.success(true)
+              } else result.success(false)
+          }
+          else -> result.notImplemented()''', 1)
+          open(k, 'w').write(c)
+          print('✅ pip + mic patched')
+          PYEOF
+
       - name: Prepare (pub get + icons)
         run: |
           flutter pub get
