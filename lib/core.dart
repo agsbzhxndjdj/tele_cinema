@@ -1219,8 +1219,11 @@ return ok == true ? '✅ تم حفظ telecinema_backup.json في مجلد الت
 }
 static Future<String> importAll() async {
 try {
-final content = await _ch.invokeMethod('readFromDownloads', {'name': 'telecinema_backup.json'});
-if (content == null || content.toString().isEmpty) return '❌ ضع ملف telecinema_backup.json في مجلد Download أولاً';
+var content = await _ch.invokeMethod('readFromDownloads', {'name': 'telecinema_backup.json'});
+if (content == null || content.toString().isEmpty) {
+content = await _ch.invokeMethod('pickBackup');
+}
+if (content == null || content.toString().isEmpty) return '❌ لم يتم اختيار ملف النسخ الاحتياطي';
 await Store.importAll(Map<String, dynamic>.from(jsonDecode(content.toString()) as Map));
 return '✅ تم الاستيراد بنجاح (قنوات + قوائم + مواضع المشاهدة)';
 } catch (e) { return '❌ فشل الاستيراد: $e'; }
