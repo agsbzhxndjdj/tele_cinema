@@ -262,14 +262,7 @@ jobs:
         run: |
           flutter pub get
           flutter pub run flutter_launcher_icons:main || echo "⚠️ launcher icons skipped"
-
-      - name: Build MOBILE APK
-        run: |
-          echo "=== بناء تطبيق الجوال ==="
-          flutter build apk --release -t lib/main.dart
-          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
-          ls -lh build/app/outputs/flutter-apk/
-
+          
       - name: Build TV APK
         run: |
           python3 -c "
@@ -282,12 +275,7 @@ jobs:
           flutter build apk --release -t lib/app_tv.dart
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/tele-cinema-TV.apk
           ls -lh build/app/outputs/flutter-apk/
-
-      - name: Build WEB
-        run: |
-          echo "=== بناء نسخة الويب ==="
-          flutter build web --release -t lib/main_web.dart --base-href /
-          cd build/web && zip -r ../../web.zip . && cd ../..
+          
 
       - name: Upload web artifact
         uses: actions/upload-artifact@v4
@@ -300,5 +288,4 @@ jobs:
         with:
           name: tele-cinema-apks
           path: |
-            build/app/outputs/flutter-apk/tele-cinema-MOBILE.apk
             build/app/outputs/flutter-apk/tele-cinema-TV.apk
