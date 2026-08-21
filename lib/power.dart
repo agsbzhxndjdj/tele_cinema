@@ -48,14 +48,21 @@ class DupInfo {
 static final Map<String, int> count = {};
 static void refresh() {
 count.clear();
+final chans = <String, Set<String>>{};
 for (final c in Store.channels()) {
 for (final m in Store.moviesOf(c.username)) {
 final k = Smart.titleKey(m.title);
-if (k.isNotEmpty) count[k] = (count[k] ?? 0) + 1;
+if (k.isEmpty || k.length < 4) continue;
+chans.putIfAbsent(k, () => {}).add(c.username);
 }
 }
+chans.forEach((k, v) => count[k] = v.length);
 }
-static int of(Movie m) => count[Smart.titleKey(m.title)] ?? 1;
+static int of(Movie m) {
+final k = Smart.titleKey(m.title);
+if (k.length < 4) return 1;
+return count[k] ?? 1;
+}
 }
 
 /* ✅ 3) جودة ذكية حسب السرعة */
