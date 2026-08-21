@@ -540,8 +540,7 @@ static void start() {
 _timer ??= Timer.periodic(const Duration(hours: 2), (_) => checkAll());
 Future.delayed(const Duration(seconds: 3), checkAll);
 /* ✅ استئناف التحميلات المتقطعة عند فتح التطبيق */
-Future.delayed(const Duration(seconds: 6), () => Downloader.resumePending());
-}
+Future.delayed(const Duration(seconds: 6), () => Downloader.restoreDownloads());
 static Future checkAll() async {
 if (_busy) return;
 _busy = true;
@@ -605,7 +604,7 @@ return false;
 }
 }
 _movies[id] = m;
-Store.setPendingDownload(id, m.toJson());
+Store.setPendingDownload(id, {...m.toJson(), '_st': 'active'});
 _keepAlive(true);
 _paused[id] = false;
 _cancelled[id] = false;
@@ -674,6 +673,8 @@ static void pause(String id) {
 if (!isActive(id)) return;
 _paused[id] = true;
 _tokens.remove(id)?.cancel();
+final d = Store.pendingDownloads()[id];
+if (d != null) Store.setPendingDownload(id, {...Map<String, dynamic>.from(d), '_st': 'paused'});
 tick.value++;
 }
 static Future resume(String id) async {
@@ -681,6 +682,12 @@ final m = _movies[id];
 if (m == null || isActive(id)) return;
 _paused[id] = false;
 _cancelled[id] = false;
+final d = Store.pendingDownloads()[id];
+if (d != null) {
+Store.setPendingDownload(id, {...Map<String, dynamic>.from(d), '_st': 'active'});
+} else {
+Store.setPendingDownload(id, {...m.toJson(), '_st': 'active'});
+}
 _keepAlive(true);
 tick.value++;
 await _run(m, _received[id] ?? 0);
@@ -688,16 +695,22 @@ await _run(m, _received[id] ?? 0);
 static void cancel(String id) {
 _cancelled[id] = true;
 _paused[id] = false;
+Store.removePendingDownload(id);
 _tokens.remove(id)?.cancel();
 if (!isActive(id)) _removeAll(id);
 tick.value++;
 }
-/* ✅ استئناف التحميلات المتقطعة (بعد قتل التطبيق) */
-static Future<void> resumePending() async {
+/* ✅ استعادة التحميلات عند فتح التطبيق:
+   - نشط عند الإغلاق = استئناف تلقائي
+   - متوقف يدوياً = يبقى متوقفاً ويظهر بالقائمة */
+static Future<void> restoreDownloads() async {
 final p = Store.pendingDownloads();
 for (final e in p.entries.toList()) {
+final v = Map<String, dynamic>.from(e.value);
+final st = (v['_st'] ?? '').toString();
+final m = Movie.fromJson(v);
 if (isActive(e.key)) continue;
-final m = Movie.fromJson(Map<String, dynamic>.from(e.value));
+if (st == 'active') {
 _movies[e.key] = m;
 _paused[e.key] = false;
 _cancelled[e.key] = false;
@@ -710,6 +723,11 @@ progress.value = {...progress.value, e.key: 0.0};
 tick.value++;
 _keepAlive(true);
 _run(m, off);
+} else {
+_movies[e.key] = m;
+_paused[e.key] = true;
+tick.value++;
+}
 }
 }
 static void _removeAll(String id) {
