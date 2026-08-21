@@ -142,40 +142,102 @@ if (mounted) setState(() => _popular = out);
 }
 
 void _addDialog() {
-final ctrl = TextEditingController();
-bool busy = false;
-showDialog(
-context: context,
-builder: (ctx) => StatefulBuilder(
-builder: (ctx, setS) => AlertDialog(
-backgroundColor: const Color(0xFF151B23),
-title: Text(Lang.t('addChannel')),
-content: TextField(
-controller: ctrl,
-autofocus: true,
-decoration: InputDecoration(hintText: Lang.t('addChannelHint'), filled: true, fillColor: const Color(0xFF0B0F14), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none))),
-actions: [
-TextButton(onPressed: () => Navigator.pop(ctx), child: Text(Lang.t('cancel'))),
-FilledButton(
-onPressed: busy
-? null
-: () async {
-setS(() => busy = true);
-final u = Tg.cleanUser(ctrl.text);
-if (u.isNotEmpty) {
-try {
-final p = await Tg.fetchPage(u);
-if (p.movies.isNotEmpty) {
-await Store.addChannel(Channel(u, title: p.title, avatar: p.avatar));
-await Store.saveMovies(u, p.movies);
-}
-} catch (_) {}
-}
-if (ctx.mounted) Navigator.pop(ctx);
-},
-child: Text(Lang.t('addChannel'))),
-],
-)));
+  final ctrl = TextEditingController();
+  bool busy = false;
+  String errorMsg = '';
+  
+  showDialog(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) => AlertDialog(
+        backgroundColor: const Color(0xFF151B23),
+        title: const Text('إضافة قناة', style: TextStyle(color: Colors.white)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'الصق رابط القناة أو @اليوزر',
+                hintStyle: const TextStyle(color: Colors.grey),
+                filled: true,
+                fillColor: const Color(0xFF0B0F14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+            if (errorMsg.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(errorMsg, style: const TextStyle(color: Colors.red, fontSize: 12)),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: busy
+                ? null
+                : () async {
+                    setS(() {
+                      busy = true;
+                      errorMsg = '';
+                    });
+                    
+                    final u = Tg.cleanUser(ctrl.text);
+                    if (u.isEmpty) {
+                      setS(() {
+                        busy = false;
+                        errorMsg = '❌ الرابط غير صحيح';
+                      });
+                      return;
+                    }
+                    
+                    try {
+                      final p = await Tg.fetchPage(u);
+                      if (p.movies.isEmpty) {
+                        setS(() {
+                          busy = false;
+                          errorMsg = '❌ القناة لا تحتوي على أفلام';
+                        });
+                        return;
+                      }
+                      
+                      await Store.addChannel(Channel(u, title: p.title, avatar: p.avatar));
+                      await Store.saveMovies(u, p.movies);
+                      await BulkLoader.loadAll(u);
+                      
+                      // ✅ تحديث الشاشة الرئيسية
+                      Store.tick.value++;
+                      App.scope.value = u;
+                      App.tab.value = 0;
+                      
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✅ تمت إضافة ${p.movies.length} فيلم من @${u}'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setS(() {
+                        busy = false;
+                        errorMsg = '❌ فشل الاتصال: ${e.toString().split(':').last}';
+                      });
+                    }
+                  },
+            child: Text(busy ? 'جاري الإضافة...' : 'إضافة'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 /* ✅ فيلم عشوائي */
