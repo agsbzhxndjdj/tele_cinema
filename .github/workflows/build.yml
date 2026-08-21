@@ -228,6 +228,36 @@ jobs:
               print('✅ MainActivity patched')
           PYEOF
 
+      - name: Patch backup file picker
+        run: |
+          python3 << 'PYEOF'
+          import glob
+          k = glob.glob('android/app/src/main/**/MainActivity.kt', recursive=True)[0]
+          c = open(k, encoding='utf-8').read()
+          if 'pickBackup' not in c:
+              c = c.replace('class MainActivity : FlutterActivity() {', '''class MainActivity : FlutterActivity() {
+              private var pendingBackupResult: MethodChannel.Result? = null
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+              if (requestCode == 1001) {
+              val r = pendingBackupResult
+              pendingBackupResult = null
+              if (resultCode == RESULT_OK && data != null && data.data != null) {
+              val text = contentResolver.openInputStream(data.data!!)?.use { String(it.readBytes()) }
+              r?.success(text)
+              } else { r?.success(null) }
+              } else { super.onActivityResult(requestCode, resultCode, data) }
+              }''', 1)
+              c = c.replace('else -> result.notImplemented()', '''"pickBackup" -> {
+              pendingBackupResult = result
+              val intent = android.content.Intent(android.content.Intent.ACTION_GET_CONTENT)
+              intent.type = "*/*"
+              startActivityForResult(android.content.Intent.createChooser(intent, "Select backup"), 1001)
+              }
+              else -> result.notImplemented()''', 1)
+              open(k, 'w', encoding='utf-8').write(c)
+              print('✅ backup picker patched')
+          PYEOF
+
       - name: Prepare (pub get + icons)
         run: |
           flutter pub get
