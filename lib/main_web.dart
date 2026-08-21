@@ -404,22 +404,39 @@ super.dispose();
 }
 
 @override
-Widget build(BuildContext context) => Directionality(textDirection: TextDirection.rtl,
-child: Scaffold(backgroundColor: Colors.black,
-appBar: AppBar(backgroundColor: Colors.black, elevation: 0,
-title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-Text(widget.m.title, style: const TextStyle(fontSize: 14, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
-if (widget.q != null) Text(widget.q!, style: TextStyle(fontSize: 11, color: accent)),
-]),
-actions: [
-if (widget.m.alts.isNotEmpty)
-PopupMenuButton<String>(icon: const Icon(Icons.hd, color: Colors.white70),
-onSelected: _switch,
-itemBuilder: (_) => [
-PopupMenuItem(value: widget.m.videoUrl, child: Text('افتراضي ${widget.m.quality}', style: const TextStyle(fontSize: 12))),
-...widget.m.alts.map((a) => PopupMenuItem(value: a['url']!, child: Text(a['q'] ?? 'جودة', style: const TextStyle(fontSize: 12))),
-]),),
-IconButton(icon: const Icon(Icons.open_in_new, color: Colors.white70), onPressed: () => html.window.open(_curUrl, '_blank')),
-]),
-body: HtmlElementView(viewType: _viewType)));
-}
+Widget build(BuildContext context) => Directionality(
+  textDirection: TextDirection.rtl,
+  child: Scaffold(
+    backgroundColor: Colors.black,
+    appBar: AppBar(
+      backgroundColor: Colors.black,
+      elevation: 0,
+      title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(widget.m.title, style: const TextStyle(fontSize: 14, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+        if (widget.q != null) Text(widget.q!, style: TextStyle(fontSize: 11, color: accent)),
+      ]),
+      actions: [
+        if (widget.m.alts.isNotEmpty)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.hd, color: Colors.white70),
+            onSelected: _switch,
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: widget.m.videoUrl,
+                child: Text('افتراضي ${widget.m.quality}', style: const TextStyle(fontSize: 12, color: Colors.black)),
+              ),
+              ...widget.m.alts.map((a) => PopupMenuItem(
+                value: a['url'] ?? widget.m.videoUrl,
+                child: Text(a['q'] ?? 'جودة', style: const TextStyle(fontSize: 12, color: Colors.black)),
+              )),
+            ],
+          ),
+        IconButton(
+          icon: const Icon(Icons.open_in_new, color: Colors.white70),
+          onPressed: () => html.window.open(_curUrl, '_blank'),
+        ),
+      ],
+    ),
+    body: HtmlElementView(viewType: _viewType),
+  ),
+);
