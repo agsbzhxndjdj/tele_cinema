@@ -1105,7 +1105,7 @@ if (_index != null) return _index!;
 final m = <String, String>{};
 for (final e in _raw) {
 for (var i = 1; i < e.length; i++) {
-m.putIfAbsent(e[i], e[0]);
+m[e[i]] = e[0];
 }
 }
 final l = m.entries.toList()..sort((a, b) => b.key.length.compareTo(a.key.length));
