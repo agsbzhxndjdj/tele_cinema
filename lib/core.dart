@@ -527,11 +527,17 @@ tick.value++;
 }
 /* ✅ التحميلات المعلّقة (للاستئناف التلقائي) */
 static Map<String, dynamic> pendingDownloads() => Map<String, dynamic>.from(_st.get('pendingDl') ?? {});
-static Future setPendingDownload(String id, Map<String, dynamic> v) async { final p = pendingDownloads(); p[id] = v; await _st.put('pendingDl', p); }
-static Future removePendingDownload(String id) async { final p = pendingDownloads(); p.remove(id);     await _st.put('pendingDl', p); 
-  }
-} // <==== هذا القوس يغلق class Store (تأكد من وجوده!)
-
+static Future setPendingDownload(String id, Map<String, dynamic> v) async {
+final p = pendingDownloads();
+p[id] = v;
+await _st.put('pendingDl', p);
+}
+static Future removePendingDownload(String id) async {
+final p = pendingDownloads();
+p.remove(id);
+await _st.put('pendingDl', p);
+}
+}
 
 class Sync {
 static bool _busy = false;
@@ -541,8 +547,8 @@ static void Function(int count, String channel)? onNewMovies;
 static void start() {
 _timer ??= Timer.periodic(const Duration(hours: 2), (_) => checkAll());
 Future.delayed(const Duration(seconds: 3), checkAll);
-/* ✅ استئناف التحميلات المتقطعة عند فتح التطبيق */
 Future.delayed(const Duration(seconds: 6), () => Downloader.restoreDownloads());
+}
 static Future checkAll() async {
 if (_busy) return;
 _busy = true;
@@ -703,8 +709,7 @@ if (!isActive(id)) _removeAll(id);
 tick.value++;
 }
 /* ✅ استعادة التحميلات عند فتح التطبيق:
-   - نشط عند الإغلاق = استئناف تلقائي
-   - متوقف يدوياً = يبقى متوقفاً ويظهر بالقائمة */
+   نشط عند الإغلاق = استئناف تلقائي / متوقف يدوياً = يبقى متوقفاً */
 static Future<void> restoreDownloads() async {
 final p = Store.pendingDownloads();
 for (final e in p.entries.toList()) {
@@ -1005,7 +1010,7 @@ static const List<List<String>> _raw = [
 ['إيب مان', 'ipman', 'yipman'],
 ['أونغ باك', 'ongbak'],
 ['الغارة', 'theraid'],
-['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devil mademedoit', 'lallorona'],
+['عالم الشعوذة', 'conjuring', 'annabelle', 'thenun', 'devilmademedoit', 'lallorona'],
 ['سو', 'jigsaw', 'saw'],
 ['هالوين', 'halloween'],
 ['شارع إلم', 'nightmareonelmstreet', 'elmstreet'],
@@ -1168,7 +1173,7 @@ final b = seriesBase(m.title);
 return b.isEmpty ? m.title : b.replaceAll('_', ' ');
 }
 
-/* ✅ للتوافق مع الشاشات القديمة */
+/* ✅ للتوافق مع الاستدعاءات القديمة */
 Future<void> verifySeries() async {
 Store.tick.value++;
 }
