@@ -85,7 +85,7 @@ super.initState();
 if (Store.channels().isNotEmpty && Store.all().isEmpty) _refresh();
 _loadSmart();
 Downloader.wifiBlocked.addListener(_wifiToast);
-/* ✅ إصلاح مشكلة تحديث القنوات: إعادة البناء عند أي تغيير */
+/* ✅ إصلاح مشكلة تحديث القنوات */
 Store.tick.addListener(_tick);
 Future.delayed(const Duration(seconds: 2), () {
 if (mounted) {
@@ -95,7 +95,6 @@ SmartDownload.check();
 });
 }
 
-/* ✅ يُستدعى عند أي tick: يحدّث القائمة + يعدّاد التكرار */
 void _tick() {
 if (mounted) {
 DupInfo.refresh();
@@ -190,51 +189,49 @@ SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(mainAxisSize:
 IconButton(icon: const Icon(Icons.search), onPressed: () => setState(() => _searching = !_searching)),
 IconButton(icon: const Icon(Icons.casino), onPressed: _random),
 PopupMenuButton<String>(
-  icon: const Icon(Icons.sort),
-  onSelected: (v) async {
-    await Store.setSortMode(v);
-    setState(() {});
-  },
-  itemBuilder: (_) => [
-    _sortItem('default', 'الأحدث أولاً'),
-    _sortItem('az', 'أبجدي (ذكي)'),
-    _sortItem('year_desc', 'السنة: الأحدث'),
-    _sortItem('year_asc', 'السنة: الأقدم'),
-    _sortItem('size_desc', 'الحجم: الأكبر'),
-    _sortItem('size_asc', 'الحجم: الأصغر'),
-    _sortItem('smart', '✨ ذكي (حسب ذوقك)'),
-  ],
+icon: const Icon(Icons.sort),
+onSelected: (v) async { await Store.setSortMode(v); setState(() {}); },
+itemBuilder: (_) => [
+_sortItem('default', 'الأحدث أولاً'),
+_sortItem('az', 'أبجدي (ذكي)'),
+_sortItem('year_desc', 'السنة: الأحدث'),
+_sortItem('year_asc', 'السنة: الأقدم'),
+_sortItem('size_desc', 'الحجم: الأكبر'),
+_sortItem('size_asc', 'الحجم: الأصغر'),
+_sortItem('smart', '✨ ذكي (حسب ذوقك)'),
+],
 ),
+IconButton(icon: const Icon(Icons.hub_outlined), tooltip: 'أدوات', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PowerHub()))),
 PopupMenuButton<String>(
-  icon: const Icon(Icons.more_vert),
-  tooltip: 'المزيد',
-  onSelected: (value) {
-    switch (value) {
-      case 'explore':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()));
-        break;
-      case 'achievements':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()));
-        break;
-      case 'series':
-        final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
-        if (seriesOnly.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
-          return;
-        }
-        Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
-        break;
-      case 'settings':
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
-        break;
-    }
-  },
-  itemBuilder: (context) => [
-    const PopupMenuItem(value: 'explore', child: Row(children: [Icon(Icons.explore_outlined), SizedBox(width: 12), Text('اكتشف')])),
-    const PopupMenuItem(value: 'achievements', child: Row(children: [Icon(Icons.emoji_events_outlined), SizedBox(width: 12), Text('انجازاتي')])),
-    const PopupMenuItem(value: 'series', child: Row(children: [Icon(Icons.movie_filter_outlined), SizedBox(width: 12), Text('السلاسل')])),
-    const PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.settings), SizedBox(width: 12), Text('الإعدادات')])),
-  ],
+icon: const Icon(Icons.more_vert),
+tooltip: 'المزيد',
+onSelected: (value) {
+switch (value) {
+case 'explore':
+Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverScreen()));
+break;
+case 'achievements':
+Navigator.push(context, MaterialPageRoute(builder: (_) => const AchievementsScreen()));
+break;
+case 'series':
+final seriesOnly = groupMoviesSmart(Store.all()).where((mm) => SeriesRegistry.isSeries(mm.id)).toList();
+if (seriesOnly.isEmpty) {
+ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('لا توجد سلاسل حالياً')));
+return;
+}
+Navigator.push(context, MaterialPageRoute(builder: (_) => AllSeriesGrid(reps: seriesOnly)));
+break;
+case 'settings':
+Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsPage()));
+break;
+}
+},
+itemBuilder: (context) => [
+const PopupMenuItem(value: 'explore', child: Row(children: [Icon(Icons.explore_outlined), SizedBox(width: 12), Text('اكتشف')])),
+const PopupMenuItem(value: 'achievements', child: Row(children: [Icon(Icons.emoji_events_outlined), SizedBox(width: 12), Text('انجازاتي')])),
+const PopupMenuItem(value: 'series', child: Row(children: [Icon(Icons.movie_filter_outlined), SizedBox(width: 12), Text('السلاسل')])),
+const PopupMenuItem(value: 'settings', child: Row(children: [Icon(Icons.settings), SizedBox(width: 12), Text('الإعدادات')])),
+],
 ),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _refresh),
 ])),], bottom: _searching
@@ -378,7 +375,6 @@ if (Store.isPinned(m.id))
 Positioned(top: 6, left: 6, child: Icon(Icons.push_pin, size: 16, color: AppTheme.accent)),
 if (m.duration.isNotEmpty)
 Positioned(bottom: 30, left: 6, child: Text(m.duration, style: const TextStyle(fontSize: 9, color: Colors.white70))),
-/* ✅ شريط التقدم باتجاه LTR */
 if (_inProgress(m))
 Positioned(left: 6, right: 6, bottom: 0, child: Directionality(textDirection: TextDirection.ltr, child: LinearProgressIndicator(value: Store.getPosition(m.id) / max(1, _durSec(m.duration)), minHeight: 3, valueColor: AlwaysStoppedAnimation(AppTheme.accent), backgroundColor: Colors.black54))),
 Positioned(top: 48, left: 4, child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -615,13 +611,11 @@ _poke();
 _posSaver = Timer.periodic(const Duration(seconds: 5), (_) => _savePosition());
 }
 
-/* ✅ جودة ذكية حسب السرعة ثم تشغيل */
 Future _initSmart() async {
 if (widget.movie != null) _autoUrl = await SpeedPick.bestUrl(widget.movie!);
 _init();
 }
 
-/* ✅ عند انتهاء الفيلم: الجزء التالي من السلسلة أولاً */
 void _onEnd() {
 final np = widget.movie != null ? NextPart.of(widget.movie!) : null;
 if (np != null) {
@@ -950,7 +944,6 @@ onPressed: () { c.value.isPlaying ? c.pause() : c.play(); _poke(); }),
 IconButton(icon: const Icon(Icons.forward_10, color: Colors.white70), onPressed: () => _jump(10)),
 IconButton(tooltip: Lang.t('skipIntro'), icon: const Icon(Icons.double_arrow, color: Colors.white70), onPressed: () => _jump(85)),
 ]),
-/* ✅ شريط التقدم والأوقات باتجاه LTR */
 Directionality(textDirection: TextDirection.ltr, child: Row(children: [
 Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(_fmt(pos), style: const TextStyle(fontSize: 11, color: Colors.white70))),
 Expanded(child: SliderTheme(
@@ -1167,7 +1160,6 @@ suffixIcon: _busy
 filled: true, fillColor: const Color(0xFF151B23),
 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none))),
 const SizedBox(height: 16),
-/* ✅ أزرار النسخ الاحتياطي */
 Row(children: [
 Expanded(child: OutlinedButton.icon(onPressed: () async { final r = await Backup.exportAll(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r))); }, icon: const Icon(Icons.upload_file), label: const Text('تصدير كل البيانات'))),
 const SizedBox(width: 8),
