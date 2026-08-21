@@ -528,8 +528,10 @@ tick.value++;
 /* ✅ التحميلات المعلّقة (للاستئناف التلقائي) */
 static Map<String, dynamic> pendingDownloads() => Map<String, dynamic>.from(_st.get('pendingDl') ?? {});
 static Future setPendingDownload(String id, Map<String, dynamic> v) async { final p = pendingDownloads(); p[id] = v; await _st.put('pendingDl', p); }
-static Future removePendingDownload(String id) async { final p = pendingDownloads(); p.remove(id); await _st.put('pendingDl', p); }
-}
+static Future removePendingDownload(String id) async { final p = pendingDownloads(); p.remove(id);     await _st.put('pendingDl', p); 
+  }
+} // <==== هذا القوس يغلق class Store (تأكد من وجوده!)
+
 
 class Sync {
 static bool _busy = false;
