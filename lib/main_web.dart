@@ -167,6 +167,18 @@ if (k.length >= 4) { seriesGroups.putIfAbsent(k, () => []).add(m); }
 return Scaffold(
 appBar: AppBar(backgroundColor: const Color(0xFF0B0F14), title: const Text('🎬 تلي سينما ويب', style: TextStyle(color: accent, fontWeight: FontWeight.bold)),
 actions: [
+Padding(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+child: FilledButton.icon(
+onPressed: () => html.window.open('https://t.me/tele_cenima', '_blank'),
+icon: const Icon(Icons.download, size: 18),
+label: const Text('المشاهدة على التطبيق', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+style: FilledButton.styleFrom(
+backgroundColor: accent,
+foregroundColor: Colors.black,
+shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+),
+),
+),
 IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
 IconButton(icon: const Icon(Icons.add_link), onPressed: _addDialog),
 ]),
@@ -298,7 +310,7 @@ body: err
 : !ready
 ? const Center(child: CircularProgressIndicator(color: accent))
 : Center(child: AspectRatio(aspectRatio: c!.value.aspectRatio, child: VideoPlayer(c!))),
-bottomNavigationBar: ready ? BottomAppBar(backgroundColor: Colors.black, child: Row(children: [
+bottomNavigationBar: ready ? Container(color: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Row(children: [
 IconButton(icon: Icon(c!.value.isPlaying ? Icons.pause : Icons.play_arrow, color: accent), onPressed: () { setState(() { c!.value.isPlaying ? c!.pause() : c!.play(); }); }),
 Expanded(child: Slider(value: c!.value.position.inSeconds.toDouble().clamp(0, c!.value.duration.inSeconds.toDouble().clamp(1, 100000000)), max: c!.value.duration.inSeconds.toDouble().clamp(1, 100000000), onChanged: (v) => c!.seekTo(Duration(seconds: v.toInt())))),
 Text(fmt(c!.value.duration), style: const TextStyle(fontSize: 11, color: Colors.white70)),
